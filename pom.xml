@@ -91,6 +91,7 @@
     <module>graphx</module>
     <module>mllib</module>
     <module>tools</module>
+    <module>yarn</module>
     <module>network/common</module>
     <module>network/shuffle</module>
     <module>streaming</module>
@@ -100,13 +101,13 @@
     <module>docker-integration-tests</module>
     <module>unsafe</module>
     <module>assembly</module>
-    <module>external/twitter</module>
+<!--    <module>external/twitter</module>
     <module>external/flume</module>
     <module>external/flume-sink</module>
     <module>external/flume-assembly</module>
     <module>external/mqtt</module>
     <module>external/mqtt-assembly</module>
-    <module>external/zeromq</module>
+    <module>external/zeromq</module>-->
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
