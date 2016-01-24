@@ -68,7 +68,10 @@ private[spark] class Client(
   def this(clientArgs: ClientArguments, spConf: SparkConf) =
     this(clientArgs, SparkHadoopUtil.get.newConfiguration(spConf), spConf)
 
+  /**调用Hadoop YARN的YarnClient创建YarnClient实例，实际上是YarnClientImpl*/
   private val yarnClient = YarnClient.createYarnClient
+
+  /**通过Hadoop的Configuration创建YarnConfiguration*/
   private val yarnConf = new YarnConfiguration(hadoopConf)
   private var credentials: Credentials = null
   private val amMemoryOverhead = args.amMemoryOverhead // MB
@@ -95,6 +98,10 @@ private[spark] class Client(
 
   private var appId: ApplicationId = null
 
+  /**
+   * 发送状态请求
+   * @param state
+   */
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
   }
@@ -116,7 +123,7 @@ private[spark] class Client(
   def submitApplication(): ApplicationId = {
     var appId: ApplicationId = null
     try {
-      launcherBackend.connect()
+      launcherBackend.connect()   /**这是干啥？**/
       // Setup the credentials before doing anything else,
       // so we have don't have issues at any point.
       setupCredentials()
@@ -126,10 +133,16 @@ private[spark] class Client(
       logInfo("Requesting a new application from cluster with %d NodeManagers"
         .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
 
-      // Get a new application from our RM
+      /** Get a new application from our RM，返回的实例是YarnClientApplication
+        * YarnClientApplication包含了两方面的信息(这两方面的信息是构造YarnClientApplication的两个参数)
+        * a.GetNewApplicationResponse
+        * b.ApplicationSubmissionContext
+        */
       val newApp = yarnClient.createApplication()
       val newAppResponse = newApp.getNewApplicationResponse()
       appId = newAppResponse.getApplicationId()
+
+      //发送应用程序提交请求到LauncherServer
       reportLauncherState(SparkAppHandle.State.SUBMITTED)
       launcherBackend.setAppId(appId.toString())
 
@@ -137,11 +150,28 @@ private[spark] class Client(
       verifyClusterResources(newAppResponse)
 
       // Set up the appropriate contexts to launch our AM
+      /**ContainerLaunchContext封装了所有的用于NodeManager启动一个Container的信息，
+        *  启动，commands封装了NodeManager要执行的命令
+        *  此处是为ApplicationMaster启动Container所需的ContainerLaunchContext
+        */
       val containerContext = createContainerLaunchContext(newAppResponse)
+
+      /**
+       * ApplicationSubmissionContext封装了所有用于ResourceManager启动ApplicationMaster的上下文信息
+       * containerContext信息是要告诉ResourceManager，ApplicationMaster是在哪个Container中执行的
+       */
       val appContext = createApplicationSubmissionContext(newApp, containerContext)
 
-      // Finally, submit and monitor the application
+      // Finally, submit and monitor the application，appId.getId得到的是一个整数，表示当前是提交的第几个Application
       logInfo(s"Submitting application ${appId.getId} to ResourceManager")
+
+      /**
+       * 提交任务，提交之后的影响是什么，立马返回还是等待YARN的处理？
+       * 这是一个Blocking call，必须等待ResourceManager接受这个任务请求才返回，
+       * 需要注意的是appContext本身已经包含了ApplicationId，而yarnClient.submitApplication也返回了这个ApplicationId
+       * ApplicationId是通过调用yarnClient.createApplication方法返回的
+       *
+       */
       yarnClient.submitApplication(appContext)
       appId
     } catch {
@@ -175,6 +205,10 @@ private[spark] class Client(
   /**
    * Set up the context for submitting our ApplicationMaster.
    * This uses the YarnClientApplication not available in the Yarn alpha API.
+   *
+   * 这里不会创建(create)，而是对newApp关联的ApplicationSubmissionContext进行setup
+   *
+   *
    */
   def createApplicationSubmissionContext(
       newApp: YarnClientApplication,
@@ -259,6 +293,11 @@ private[spark] class Client(
   }
 
   /** Get the application report from the ResourceManager for an application we have submitted. */
+  /**
+   * 调用YarnClient提供的API获取Application运行状态信息
+   * @param appId
+   * @return
+   */
   def getApplicationReport(appId: ApplicationId): ApplicationReport =
     yarnClient.getApplicationReport(appId)
 
@@ -271,6 +310,8 @@ private[spark] class Client(
 
   /**
    * Fail fast if we have requested more resources per container than is available in the cluster.
+   *
+   * 如何判断资源是否潮涌
    */
   private def verifyClusterResources(newAppResponse: GetNewApplicationResponse): Unit = {
     val maxMem = newAppResponse.getMaximumResourceCapability().getMemory()
@@ -704,6 +745,8 @@ private[spark] class Client(
   /**
    * Set up a ContainerLaunchContext to launch our ApplicationMaster container.
    * This sets up the launch environment, java options, and the command for launching the AM.
+   *
+   * 这是创建AM的运行时环境吗？
    */
   private def createContainerLaunchContext(newAppResponse: GetNewApplicationResponse)
     : ContainerLaunchContext = {
@@ -921,10 +964,15 @@ private[spark] class Client(
       appId: ApplicationId,
       returnOnRunning: Boolean = false,
       logApplicationReport: Boolean = true): (YarnApplicationState, FinalApplicationStatus) = {
+
+    /**
+     * 监控YARN Application运行状态的间隔时间，平均每1秒汇报一次
+     */
     val interval = sparkConf.getLong("spark.yarn.report.interval", 1000)
     var lastState: YarnApplicationState = null
     while (true) {
       Thread.sleep(interval)
+      //ApplicationReport是Hadoop Yarn提供的API
       val report: ApplicationReport =
         try {
           getApplicationReport(appId)
@@ -936,6 +984,10 @@ private[spark] class Client(
             logError(s"Failed to contact YARN for application $appId.", e)
             return (YarnApplicationState.FAILED, FinalApplicationStatus.FAILED)
         }
+
+      /**
+       * YarnApplicationState
+       */
       val state = report.getYarnApplicationState
 
       if (logApplicationReport) {
@@ -971,6 +1023,9 @@ private[spark] class Client(
         return (state, report.getFinalApplicationStatus)
       }
 
+      /**
+       * 运行起来就返回
+       */
       if (returnOnRunning && state == YarnApplicationState.RUNNING) {
         return (state, report.getFinalApplicationStatus)
       }

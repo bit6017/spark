@@ -24,6 +24,10 @@ import org.apache.spark._
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.Utils
 
+/**
+ * YarnScheduler继承自TaskSchedulerImpl，并且以SparkContext作为构造参数
+ * @param sc
+ */
 private[spark] class YarnScheduler(sc: SparkContext) extends TaskSchedulerImpl(sc) {
 
   // RackResolver logs an INFO message whenever it resolves a rack, which is way too often.
@@ -32,8 +36,19 @@ private[spark] class YarnScheduler(sc: SparkContext) extends TaskSchedulerImpl(s
   }
 
   // By default, rack is unknown
+
+  /**
+   * getRackForHost在TaskSchedulerImpl中默认返回None，也就是Spark Standalone模式是没有机架感知能力的？
+   * 而，基于HADOOP的YARN是有机架感知能力的
+   * @param hostPort
+   * @return
+   */
   override def getRackForHost(hostPort: String): Option[String] = {
+    //解析host:post，得到host部分的信息
     val host = Utils.parseHostPort(hostPort)._1
+
+    //调用HADOOP YARN的RackResolver.resolve方法获取指定host的机架信息
+    /***问题：sc的hadoopConfiguration是何时注入的？SparkContext通过调用 SparkHadoopUtil.get.newConfiguration(SparkConf)获得的*/
     Option(RackResolver.resolve(sc.hadoopConfiguration, host).getNetworkLocation)
   }
 }

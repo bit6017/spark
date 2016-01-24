@@ -50,12 +50,15 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   import SparkConf._
 
   /** Create a SparkConf that loads defaults from system properties and the classpath */
+  /**从System Properties以及类路径中加载默认的配置属性*/
+  /**代码中没有看到从classpath上加载配置*/
   def this() = this(true)
 
   private val settings = new ConcurrentHashMap[String, String]()
 
   if (loadDefaults) {
     // Load any spark.* system properties
+    /**Utils.getSystemProperties是获取一个(K,V)二元组的集合，通过for(<-)进行遍历,遍历的Key需要以spark.开头的才是有效的System Properties**/
     for ((key, value) <- Utils.getSystemProperties if key.startsWith("spark.")) {
       set(key, value)
     }
@@ -89,12 +92,16 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   /** Set JAR files to distribute to the cluster. */
   def setJars(jars: Seq[String]): SparkConf = {
+    /**首先遍历jar集合,查找null元素，如果jar集合中包含多个null，那么logWarning将调用多次*/
     for (jar <- jars if (jar == null)) logWarning("null jar passed to SparkContext constructor")
+
+    /**首先过滤出不为null的元素(依然为Seq集合)，然后调用mkString将集合展开为逗号分隔的字符串*/
     set("spark.jars", jars.filter(_ != null).mkString(","))
   }
 
   /** Set JAR files to distribute to the cluster. (Java-friendly version.) */
   def setJars(jars: Array[String]): SparkConf = {
+    /**调用Array的toSeq方法，可以将Array转换为Seq*/
     setJars(jars.toSeq)
   }
 
@@ -102,6 +109,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
    * Set an environment variable to be used when launching executors for this application.
    * These variables are stored as properties of the form spark.executorEnv.VAR_NAME
    * (for example spark.executorEnv.PATH) but this method makes them easier to set.
+   *
+   * 设置Spark应用程序的Executor的环境信息，记住Executor的环境信息的Key是以spark.executorEnv.开头，等到看到这个时候
+   * 在详细的了解Executor的环境信息的含义
    */
   def setExecutorEnv(variable: String, value: String): SparkConf = {
     set("spark.executorEnv." + variable, value)
@@ -392,6 +402,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     val sparkExecutorInstances = "spark.executor.instances"
 
     // Used by Yarn in 1.1 and before
+
+    /**
+     * 从System.properties中读取配置项，Option有一个foreach操作，如果是Some那么取出Some包裹的值，None则不做任何操作
+     */
     sys.props.get("spark.driver.libraryPath").foreach { value =>
       val warning =
         s"""
@@ -424,10 +438,16 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
       "spark.shuffle.safetyFraction",
       "spark.storage.unrollFraction",
       "spark.storage.safetyFraction")
+
+    /**为什么deprecatedMemoryKeys追加到memoryKeys集合的最后了？不是已经deprecated了吗*/
     val memoryKeys = Seq(
       "spark.memory.fraction",
       "spark.memory.storageFraction") ++
       deprecatedMemoryKeys
+
+    /**
+     * 每个值默认都是0.5？
+     */
     for (key <- memoryKeys) {
       val value = getDouble(key, 0.5)
       if (value > 1 || value < 0) {
@@ -437,10 +457,13 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
     // Warn against deprecated memory fractions (unless legacy memory management mode is enabled)
     val legacyMemoryManagementKey = "spark.memory.useLegacyMode"
+    //默认不使用老的的内存管理模型
     val legacyMemoryManagement = getBoolean(legacyMemoryManagementKey, false)
+
+    //如果使用新的内存管理模型，那么需要对deprecatedMemoryKeys进行warning
     if (!legacyMemoryManagement) {
       val keyset = deprecatedMemoryKeys.toSet
-      val detected = settings.keys().asScala.filter(keyset.contains)
+      val detected = settings.keys().asScala.filter(keyset.contains) /**取出setting集合和deprecatedMemoryKeys集合的子集*/
       if (detected.nonEmpty) {
         logWarning("Detected deprecated memory fraction settings: " +
           detected.mkString("[", ", ", "]") + ". As of Spark 1.6, execution and storage " +

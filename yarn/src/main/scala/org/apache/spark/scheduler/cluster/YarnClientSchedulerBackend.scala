@@ -26,6 +26,13 @@ import org.apache.spark.deploy.yarn.{Client, ClientArguments, YarnSparkHadoopUti
 import org.apache.spark.launcher.SparkAppHandle
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
+/**
+ * 以TaskSchedulerImpl和SparkContext作为构造参数
+ * YarnClientSchedulerBackend继承自YarnSchedulerBackend，而YarnSchedulerBackend继承自CoarseGrainedSchedulerBackend
+ * 因此，YarnClientSchedulerBackend也继承自CoarseGrainedSchedulerBackend
+ * @param scheduler
+ * @param sc
+ */
 private[spark] class YarnClientSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext)
@@ -38,22 +45,39 @@ private[spark] class YarnClientSchedulerBackend(
   /**
    * Create a Yarn client to submit an application to the ResourceManager.
    * This waits until the application is running.
+   *
+   * 在TaskSchedulerImpl自类YarnScheduler中启动YarnClientSchedulerBackend
    */
   override def start() {
+
+    //Driver的host和port可以指定吗？
     val driverHost = conf.get("spark.driver.host")
     val driverPort = conf.get("spark.driver.port")
     val hostport = driverHost + ":" + driverPort
+
+    //设置spark.driver.appUIAddress属性
     sc.ui.foreach { ui => conf.set("spark.driver.appUIAddress", ui.appUIAddress) }
 
     val argsArrayBuf = new ArrayBuffer[String]()
-    argsArrayBuf += ("--arg", hostport)
+    argsArrayBuf += ("--arg", hostport) // ArrayBuffer的 += 是添加一个数组元素，此处，driver的IP和端口通过--arg标识
     argsArrayBuf ++= getExtraClientArguments
 
     logDebug("ClientArguments called with: " + argsArrayBuf.mkString(" "))
+
+    //根据上面的参数，构造ClientArguments
     val args = new ClientArguments(argsArrayBuf.toArray, conf)
+
+
     totalExpectedExecutors = args.numExecutors
+
+    /**创建Client*/
     client = new Client(args, conf)
-    bindToYarn(client.submitApplication(), None)
+
+    /**等待YarnClient提交Application到集群，返回ApplicationId实例*/
+    val applicationId = client.submitApplication()
+
+    //记录下applicationId
+    bindToYarn(applicationId,  None)
 
     // SPARK-8687: Ensure all necessary properties have already been set before
     // we initialize our driver scheduler backend, which serves these properties
@@ -104,6 +128,8 @@ private[spark] class YarnClientSchedulerBackend(
     // The app name is a special case because "spark.app.name" is required of all applications.
     // As a result, the corresponding "SPARK_YARN_APP_NAME" is already handled preemptively in
     // SparkSubmitArguments if "spark.app.name" is not explicitly set by the user. (SPARK-5222)
+
+    //指定--name
     sc.getConf.getOption("spark.app.name").foreach(v => extraArgs += ("--name", v))
     extraArgs
   }
@@ -112,6 +138,8 @@ private[spark] class YarnClientSchedulerBackend(
    * Report the state of the application until it is running.
    * If the application has finished, failed or been killed in the process, throw an exception.
    * This assumes both `client` and `appId` have already been set.
+   *
+   * 等待Application运行起来
    */
   private def waitForApplication(): Unit = {
     assert(client != null && appId.isDefined, "Application has not been submitted yet!")

@@ -36,6 +36,9 @@ private[spark] abstract class LauncherBackend {
   private var lastState: SparkAppHandle.State = _
   @volatile private var _isConnected = false
 
+  /**
+   * 通过启动一个线程，发送一个Hello Message，目的是干啥
+   */
   def connect(): Unit = {
     val port = sys.env.get(LauncherProtocol.ENV_LAUNCHER_PORT).map(_.toInt)
     val secret = sys.env.get(LauncherProtocol.ENV_LAUNCHER_SECRET)
@@ -61,12 +64,20 @@ private[spark] abstract class LauncherBackend {
     }
   }
 
+  /**
+   * 给LaunchServer发送SetAppId请求
+   * @param appId
+   */
   def setAppId(appId: String): Unit = {
     if (connection != null) {
       connection.send(new SetAppId(appId))
     }
   }
 
+  /**
+   * 给LaunchServer发送应用程序状态的请求
+   * @param state
+   */
   def setState(state: SparkAppHandle.State): Unit = {
     if (connection != null && lastState != state) {
       connection.send(new SetState(state))

@@ -1538,6 +1538,10 @@ private[spark] object Utils extends Logging {
     * properties which have been set explicitly, as well as those for which only a default value
     * has been defined. */
   def getSystemProperties: Map[String, String] = {
+
+    /**首先获取PropertyNames集合(Java的Set类型)，然后调用asScala转换为Scala的Set类型*/
+    /**Scala的Set[K,V]调用toMap转换为Scala的Map类型*/
+    /**这个方法提供了将Java的Properties转换为Scala的Map的方法*/
     System.getProperties.stringPropertyNames().asScala
       .map(key => (key, System.getProperty(key))).toMap
   }

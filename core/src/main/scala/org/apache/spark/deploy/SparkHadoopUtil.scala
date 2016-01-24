@@ -78,6 +78,10 @@ class SparkHadoopUtil extends Logging {
    * subsystems.
    */
   def newConfiguration(conf: SparkConf): Configuration = {
+
+    /**
+     * 会读取classpath上的配置文件，然后加载相应的配置项吗？
+     */
     val hadoopConf = new Configuration()
 
     // Note: this null check is around more than just access to the "conf" object to maintain
@@ -97,6 +101,9 @@ class SparkHadoopUtil extends Logging {
         hadoopConf.set("fs.s3a.secret.key", accessKey)
       }
       // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
+      /**
+       * 从SparkConf中解析出所有以spark.hadoop.开头的配置项，然后加载到Hadoop的Configuration中
+       */
       conf.getAll.foreach { case (key, value) =>
         if (key.startsWith("spark.hadoop.")) {
           hadoopConf.set(key.substring("spark.hadoop.".length), value)
@@ -112,6 +119,8 @@ class SparkHadoopUtil extends Logging {
   /**
    * Add any user credentials to the job conf which are necessary for running on a secure Hadoop
    * cluster.
+   *
+   * 因为Hadoop1.X没有实现Hadoop安全集群，因此此处都是空实现
    */
   def addCredentials(conf: JobConf) {}
 
@@ -211,14 +220,32 @@ class SparkHadoopUtil extends Logging {
     listLeafDirStatuses(fs, fs.getFileStatus(basePath))
   }
 
+  /**
+   * 什么是leafDir？就是没有子目录的目录
+   * @param fs Hadoop文件系统
+   * @param baseStatus FileStatus对象，需要是目录
+   * @return
+   */
   def listLeafDirStatuses(fs: FileSystem, baseStatus: FileStatus): Seq[FileStatus] = {
     def recurse(status: FileStatus): Seq[FileStatus] = {
+
+      /**
+       * 列出status目录下的所有文件和子目录，并且进行partition，目录在左，文件在右
+       */
       val (directories, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
+
+      /**
+       * 如果status目录为空，那么将它拿下，否则为空
+       */
       val leaves = if (directories.isEmpty) Seq(status) else Seq.empty[FileStatus]
+
+      /**
+       * 递归看子目录
+       */
       leaves ++ directories.flatMap(dir => listLeafDirStatuses(fs, dir))
     }
 
-    assert(baseStatus.isDirectory)
+     assert(baseStatus.isDirectory)
     recurse(baseStatus)
   }
 
@@ -357,7 +384,14 @@ class SparkHadoopUtil extends Logging {
 
 object SparkHadoopUtil {
 
+  /**
+   * 直接创建SparkHadoopUtil
+   */
   private lazy val hadoop = new SparkHadoopUtil
+
+  /**
+   * 创建继承自SparkHadoopUtil的org.apache.spark.deploy.yarn.YarnSparkHadoopUtil类实例
+   */
   private lazy val yarn = try {
     Utils.classForName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
       .newInstance()
@@ -370,8 +404,16 @@ object SparkHadoopUtil {
 
   val SPARK_YARN_CREDS_COUNTER_DELIM = "-"
 
+  /**
+   * 获取SparkHadoopUtil实例
+   * @return
+   */
   def get: SparkHadoopUtil = {
     // Check each time to support changing to/from YARN
+
+    /**
+     * 如果设置了SPARK_YARN_MODE系统变量或者环境变量，那么就是YARN模式(其实就是Hadoop 2.X)，否则就是HADOOP模式(其实就是Hadoop 1.x)
+     */
     val yarnMode = java.lang.Boolean.valueOf(
         System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
     if (yarnMode) {

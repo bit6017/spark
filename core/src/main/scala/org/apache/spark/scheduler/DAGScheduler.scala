@@ -108,18 +108,25 @@ import org.apache.spark.util._
  *
  *  - When adding a new data structure, update `DAGSchedulerSuite.assertDataStructuresEmpty` to
  *    include the new structure. This will help to catch memory leaks.
+ *
+ *    DAGScheduler的主构造函数以SparkContext和TaskScheduler作为参数，其它参数如何搞？
  */
 private[spark]
 class DAGScheduler(
     private[scheduler] val sc: SparkContext,
     private[scheduler] val taskScheduler: TaskScheduler,
     listenerBus: LiveListenerBus,
-    mapOutputTracker: MapOutputTrackerMaster,
-    blockManagerMaster: BlockManagerMaster,
+    mapOutputTracker: MapOutputTrackerMaster, //MapOutputTracker是主从架构，有MapOutputTrackerMaster，也有MapOutputTrackerWorker
+    blockManagerMaster: BlockManagerMaster,  //BlockManager也是主从架构？不是，只有BlockManagerMaster类，没有BlockManagerWorker
     env: SparkEnv,
     clock: Clock = new SystemClock())
   extends Logging {
 
+  /**
+   * 调用DAGSCheduler的主构造函数
+   * @param sc
+   * @param taskScheduler
+   */
   def this(sc: SparkContext, taskScheduler: TaskScheduler) = {
     this(
       sc,
@@ -130,6 +137,11 @@ class DAGScheduler(
       sc.env)
   }
 
+  /**
+   * DAGScheduler的主构造函数以SparkContext和TaskScheduler作为参数
+   * @param sc
+   * @return
+   */
   def this(sc: SparkContext) = this(sc, sc.taskScheduler)
 
   private[spark] val metricsSource: DAGSchedulerSource = new DAGSchedulerSource(this)

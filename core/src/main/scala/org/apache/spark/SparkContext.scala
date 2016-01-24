@@ -75,6 +75,8 @@ import org.apache.spark.util._
  *
  * @param config a Spark Config object describing the application configuration. Any settings in
  *   this config overrides the default configs as well as system properties.
+ *
+ *   SparkContext的主构造函数是以SparkConf作为参数
  */
 class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationClient {
 
@@ -119,6 +121,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Create a SparkContext that loads settings from system properties (for instance, when
    * launching with ./bin/spark-submit).
+   *
+   * 默认构造函数，SparkContext新建了一个默认的SparkConf实例，那么默认的SparkConf实例都有哪些配置项
    */
   def this() = this(new SparkConf())
 
@@ -128,6 +132,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
    * @param conf a [[org.apache.spark.SparkConf]] object specifying other Spark parameters
+   *
+   *  既提供了SparkConf，又提供了master和appName，这是什么API?什么情况下会调用这个构造方法？
    */
   def this(master: String, appName: String, conf: SparkConf) =
     this(SparkContext.updatedConf(conf, master, appName))
@@ -140,7 +146,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param sparkHome Location where Spark is installed on cluster nodes.
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
-   * @param environment Environment variables to set on worker nodes.
+   * @param environment Environment variables to set on worker nodes. (所谓的worker nodes就是指的Executor)
+   *
+   *  为什么新建了SparkConf之后再去clone and then update？不能直接新建了SparkConf后进行修改吗？
    */
   def this(
       master: String,
@@ -161,8 +169,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI.
+   *
+   *  为什么需要定义这个构造函数？因为上面带有五个参数的构造方法，后面三个参数是带有默认值的，即
+   *  不提供这个构造函数，也是不影响编译的啊？
    */
   private[spark] def this(master: String, appName: String) =
+
     this(master, appName, null, Nil, Map())
 
   /**
@@ -183,6 +195,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param sparkHome Location where Spark is installed on cluster nodes.
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
+   *
+   *             jars参数其实就是--jars传递过来的吧？问题：如果我是通过spark-submit --jar传递的jars，而在SparkContext中没有指定，
+   *             那么SparkConf如何得知的我通过命令行传递的--jars参数
+   *
    */
   private[spark] def this(master: String, appName: String, sparkHome: String, jars: Seq[String]) =
     this(master, appName, sparkHome, jars, Map())
@@ -197,16 +213,21 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    | constructor is still running is safe.                                                 |
    * ------------------------------------------------------------------------------------- */
 
+  /** *******************************************************************************************************
+    *
+    *  成员变量定义开始，这些变量构成了整个Spark作业的运行时环境
+    *
+  **********************************************************************************************************/
   private var _conf: SparkConf = _
-  private var _eventLogDir: Option[URI] = None
-  private var _eventLogCodec: Option[String] = None
-  private var _env: SparkEnv = _
+  private var _eventLogDir: Option[URI] = None   //在spark-defaults.conf中配置的spark.event.logDir属性，通常配置于HDFS上
+  private var _eventLogCodec: Option[String] = None  //event log的压缩方式
+  private var _env: SparkEnv = _  //SparkEnv是Spark作业的运行时环境
   private var _jobProgressListener: JobProgressListener = _
   private var _statusTracker: SparkStatusTracker = _
   private var _progressBar: Option[ConsoleProgressBar] = None
   private var _ui: Option[SparkUI] = None
   private var _hadoopConfiguration: Configuration = _
-  private var _executorMemory: Int = _
+  private var _executorMemory: Int = _  //Executor的内存，为啥没有Driver的内存
   private var _schedulerBackend: SchedulerBackend = _
   private var _taskScheduler: TaskScheduler = _
   private var _heartbeatReceiver: RpcEndpointRef = _
@@ -221,6 +242,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private var _files: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
 
+
+  /** *******************************************************************************************************
+    *
+    *  成员变量定义结束，这些变量构成了整个Spark作业的运行时环境
+    *
+    **********************************************************************************************************/
+
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
    | context.                                                                              |
@@ -234,7 +262,17 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def getConf: SparkConf = conf.clone()
 
+  /**
+   * 通过函数的方式获取成员变量值
+   * @return
+   */
   def jars: Seq[String] = _jars
+
+
+  /**
+   * spark-submit --files选项表达什么含义
+   * @return
+   */
   def files: Seq[String] = _files
   def master: String = _conf.get("spark.master")
   def appName: String = _conf.get("spark.app.name")
@@ -302,6 +340,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   private[spark] def taskScheduler: TaskScheduler = _taskScheduler
+
+  /**
+   * taskScheduler_方法是一个接受一个TaskScheduler的function
+   * @param ts
+   */
   private[spark] def taskScheduler_=(ts: TaskScheduler): Unit = {
     _taskScheduler = ts
   }
@@ -368,6 +411,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     Utils.setLogLevel(org.apache.log4j.Level.toLevel(logLevel))
   }
 
+
+  /**************************************************************************************************
+     ** SparkContext主构造方法开始执行方法体逻辑
+  **************************************************************************************************/
   try {
     _conf = config.clone()
     _conf.validateSettings()
@@ -445,6 +492,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         None
       }
 
+    /**
+     * 创建SparkUI
+     */
     _ui =
       if (conf.getBoolean("spark.ui.enabled", true)) {
         Some(SparkUI.createLiveUI(this, _conf, listenerBus, _jobProgressListener,
@@ -455,6 +505,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       }
     // Bind the UI before starting the task scheduler to communicate
     // the bound port to the cluster manager properly
+    //启动内置的jetty server，端口是多少？
     _ui.foreach(_.bind())
 
     _hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(_conf)
@@ -496,14 +547,27 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       HeartbeatReceiver.ENDPOINT_NAME, new HeartbeatReceiver(this))
 
     // Create and start the scheduler
+
+
+    /**创建Spark的SchedulerBackend和TaskScheduler，根据master不同，实例不同
+      *
+      */
     val (sched, ts) = SparkContext.createTaskScheduler(this, master)
     _schedulerBackend = sched
     _taskScheduler = ts
+
+    /**
+     * 创建DAGScheduler，在DAGScheduler构造时，上面创建的TaskScheduler实例将作为构造参数(通过sc.taskScheduler传递)
+     */
     _dagScheduler = new DAGScheduler(this)
+
+
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
 
     // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
     // constructor
+
+    /**启动TaskScheduler**/
     _taskScheduler.start()
 
     _applicationId = _taskScheduler.applicationId()
@@ -2282,6 +2346,17 @@ object SparkContext extends Logging {
    * parameters that are passed as the default value of null, instead of throwing an exception
    * like SparkConf would.
    */
+
+  /**
+   *
+   * @param conf
+   * @param master
+   * @param appName
+   * @param sparkHome
+   * @param jars
+   * @param environment
+   * @return
+   */
   private[spark] def updatedConf(
       conf: SparkConf,
       master: String,
@@ -2290,10 +2365,10 @@ object SparkContext extends Logging {
       jars: Seq[String] = Nil,
       environment: Map[String, String] = Map()): SparkConf =
   {
-    val res = conf.clone()
-    res.setMaster(master)
-    res.setAppName(appName)
-    if (sparkHome != null) {
+    val res = conf.clone()  //克隆一个新的SparkConf
+    res.setMaster(master) //设置master
+    res.setAppName(appName) //设置appName
+    if (sparkHome != null) { //sparkHome是干啥的？设置spark.home变量，应该是动态设置SPARK_HOME变量
       res.setSparkHome(sparkHome)
     }
     if (jars != null && !jars.isEmpty) {
@@ -2305,11 +2380,17 @@ object SparkContext extends Logging {
 
   /**
    * The number of driver cores to use for execution in local mode, 0 otherwise.
+   * 本地模式下，DriverCores的个数
    */
   private[spark] def numDriverCores(master: String): Int = {
     def convertToInt(threads: String): Int = {
       if (threads == "*") Runtime.getRuntime.availableProcessors() else threads.toInt
     }
+
+    //如果是local，那么driver core个数为1
+    //如果是local[0]到local[9]或者local[*]，那么如果是数字就取数字，如果是*，就取所有的core数
+    //如果是local[3,2],local[4,7]等就取第一个数字
+    //其它情况是0
     master match {
       case "local" => 1
       case SparkMasterRegex.LOCAL_N_REGEX(threads) => convertToInt(threads)
@@ -2330,13 +2411,22 @@ object SparkContext extends Logging {
     // When running locally, don't try to re-execute tasks on failure.
     val MAX_LOCAL_TASK_FAILURES = 1
 
+
     master match {
+
+      /**
+       * 如果是本地模式，TaskScheduler的实现类是TaskSchedulerImpl，SchedulerBackend的实现是LocalBackend
+       *
+       */
       case "local" =>
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
         val backend = new LocalBackend(sc.getConf, scheduler, 1)
         scheduler.initialize(backend)
         (backend, scheduler)
 
+      /**
+       * 如果是本地多线程模式，TaskScheduler的实现类是TaskSchedulerImpl，SchedulerBackend的实现是LocalBackend
+       */
       case LOCAL_N_REGEX(threads) =>
         def localCpuCount: Int = Runtime.getRuntime.availableProcessors()
         // local[*] estimates the number of cores on the machine; local[N] uses exactly N threads.
@@ -2349,6 +2439,10 @@ object SparkContext extends Logging {
         scheduler.initialize(backend)
         (backend, scheduler)
 
+
+      /**
+       * 如果是本地多线程并且指定多次尝试的模式，TaskScheduler的实现类是TaskSchedulerImpl，SchedulerBackend的实现是LocalBackend
+       */
       case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
         def localCpuCount: Int = Runtime.getRuntime.availableProcessors()
         // local[*, M] means the number of cores on the computer with M failures
@@ -2359,6 +2453,9 @@ object SparkContext extends Logging {
         scheduler.initialize(backend)
         (backend, scheduler)
 
+      /**
+       * 如果是Standalone模式，TaskScheduler的实现类是TaskSchedulerImpl，SchedulerBackend的实现是SparkDeploySchedulerBackend
+       */
       case SPARK_REGEX(sparkUrl) =>
         val scheduler = new TaskSchedulerImpl(sc)
         val masterUrls = sparkUrl.split(",").map("spark://" + _)
@@ -2366,6 +2463,9 @@ object SparkContext extends Logging {
         scheduler.initialize(backend)
         (backend, scheduler)
 
+      /**
+       * 如果是本地集群模式，TaskScheduler的实现类是TaskSchedulerImpl，SchedulerBackend的实现是SparkDeploySchedulerBackend
+       */
       case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
         // Check to make sure memory requested <= memoryPerSlave. Otherwise Spark will just hang.
         val memoryPerSlaveInt = memoryPerSlave.toInt
@@ -2386,6 +2486,13 @@ object SparkContext extends Logging {
         }
         (backend, scheduler)
 
+      /**
+       * 如果是YARN集群模式，
+       * TaskScheduler的实现类是org.apache.spark.scheduler.cluster.YarnClusterScheduler，
+       *
+       *
+       * SchedulerBackend的实现是org.apache.spark.scheduler.cluster.YarnClusterSchedulerBackend
+       */
       case "yarn-standalone" | "yarn-cluster" =>
         if (master == "yarn-standalone") {
           logWarning(
@@ -2393,7 +2500,7 @@ object SparkContext extends Logging {
         }
         val scheduler = try {
           val clazz = Utils.classForName("org.apache.spark.scheduler.cluster.YarnClusterScheduler")
-          val cons = clazz.getConstructor(classOf[SparkContext])
+          val cons = clazz.getConstructor(classOf[SparkContext])  /**YarnClusterScheduler的构造参数是SparkContext，并且是TaskSchedulerImpl的子类*/
           cons.newInstance(sc).asInstanceOf[TaskSchedulerImpl]
         } catch {
           // TODO: Enumerate the exact reasons why it can fail
@@ -2405,8 +2512,8 @@ object SparkContext extends Logging {
         val backend = try {
           val clazz =
             Utils.classForName("org.apache.spark.scheduler.cluster.YarnClusterSchedulerBackend")
-          val cons = clazz.getConstructor(classOf[TaskSchedulerImpl], classOf[SparkContext])
-          cons.newInstance(scheduler, sc).asInstanceOf[CoarseGrainedSchedulerBackend]
+          val cons = clazz.getConstructor(classOf[TaskSchedulerImpl], classOf[SparkContext]) /**YarnClusterSchedulerBackend的构造参数是TaskSchedulerImpl和SparkContext，并且是CoarseGrainedSchedulerBacken的子类**/
+          cons.newInstance(scheduler, sc).asInstanceOf[CoarseGrainedSchedulerBackend] /**以YarnClusterScheduler和SparkContext作为参数进行构造**/
         } catch {
           case e: Exception => {
             throw new SparkException("YARN mode not available ?", e)
@@ -2415,6 +2522,10 @@ object SparkContext extends Logging {
         scheduler.initialize(backend)
         (backend, scheduler)
 
+      /**
+       * 如果是yarn-client模式，那么
+       * TaskScheduler的实现类是org.apache.spark.scheduler.cluster.YarnScheduler，YarnScheduler是TaskSchedulerImpl的子类，并且以SparkContext作为构造参数
+       */
       case "yarn-client" =>
         val scheduler = try {
           val clazz = Utils.classForName("org.apache.spark.scheduler.cluster.YarnScheduler")
@@ -2427,17 +2538,22 @@ object SparkContext extends Logging {
           }
         }
 
+        /**
+         * SchedulerBackend的实现类是org.apache.spark.scheduler.cluster.YarnClientSchedulerBackend，它是CoarseGrainedSchedulerBackend的子类
+         * 以TaskSchedulerImpl和SparkContext作为构造参数
+         */
         val backend = try {
           val clazz =
             Utils.classForName("org.apache.spark.scheduler.cluster.YarnClientSchedulerBackend")
           val cons = clazz.getConstructor(classOf[TaskSchedulerImpl], classOf[SparkContext])
-          cons.newInstance(scheduler, sc).asInstanceOf[CoarseGrainedSchedulerBackend]
+          cons.newInstance(scheduler, sc).asInstanceOf[CoarseGrainedSchedulerBackend] //构造
         } catch {
           case e: Exception => {
             throw new SparkException("YARN mode not available ?", e)
           }
         }
 
+        //因为YarnScheduler没有覆盖TaskSchedulerImpl的initialize方法，因此此处调用TaskSchedulerImpl的initialize方法
         scheduler.initialize(backend)
         (backend, scheduler)
 
@@ -2475,9 +2591,9 @@ object SparkContext extends Logging {
  */
 private object SparkMasterRegex {
   // Regular expression used for local[N] and local[*] master formats
-  val LOCAL_N_REGEX = """local\[([0-9]+|\*)\]""".r
+  val LOCAL_N_REGEX = """local\[([0-9]+|\*)\]""".r /**local[0]到local[9],或者local[*]**/
   // Regular expression for local[N, maxRetries], used in tests with failing tasks
-  val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+|\*)\s*,\s*([0-9]+)\]""".r
+  val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+|\*)\s*,\s*([0-9]+)\]""".r   /**配置local[2,3],local[4,2]等100种情况*/
   // Regular expression for simulating a Spark cluster of [N, cores, memory] locally
   val LOCAL_CLUSTER_REGEX = """local-cluster\[\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*]""".r
   // Regular expression for connecting to Spark deploy clusters

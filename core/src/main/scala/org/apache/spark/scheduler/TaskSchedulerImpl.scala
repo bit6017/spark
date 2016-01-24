@@ -123,10 +123,18 @@ private[spark] class TaskSchedulerImpl(
     this.dagScheduler = dagScheduler
   }
 
+  /**
+   * 所有的TaskSchedulerImpl都没有重写initialize方法，因此此初始化方法应该是在各种集群模式下通用的
+   * initialize方法用于创建调用策略
+   * @param backend
+   */
   def initialize(backend: SchedulerBackend) {
     this.backend = backend
     // temporarily set rootPool name to empty
+    /**schedulerMode是通过配置参数spark.scheduler.mode进行配置的，默认是FIFO*/
     rootPool = new Pool("", schedulingMode, 0, 0)
+
+    //根据调度策略，返回相应的SchedulableBuilder
     schedulableBuilder = {
       schedulingMode match {
         case SchedulingMode.FIFO =>
@@ -140,16 +148,25 @@ private[spark] class TaskSchedulerImpl(
 
   def newTaskId(): Long = nextTaskId.getAndIncrement()
 
+  /**
+   * TaskSchedulerImpl也没有别重写，也就是说各个集群模式下的TaskScheduler启动方式是一致的
+   * (但是逻辑不同，不同的TaskScheduler将启动不通的SchedulerBackend)
+   *
+   * TaskScheduler的start方法就是启动关联的SchedulerBackend以及启动推测执行线程池
+   */
   override def start() {
     backend.start()
 
+    /**
+     * 非本地模式下启用了任务推测执行，那么启动推测执行线程池(返回的是Java的ScheduledExecutorService)
+     */
     if (!isLocal && conf.getBoolean("spark.speculation", false)) {
       logInfo("Starting speculative execution thread")
       speculationScheduler.scheduleAtFixedRate(new Runnable {
         override def run(): Unit = Utils.tryOrStopSparkContext(sc) {
           checkSpeculatableTasks()
         }
-      }, SPECULATION_INTERVAL_MS, SPECULATION_INTERVAL_MS, TimeUnit.MILLISECONDS)
+      }, SPECULATION_INTERVAL_MS, SPECULATION_INTERVAL_MS, TimeUnit.MILLISECONDS) //每隔100ms检查一次
     }
   }
 

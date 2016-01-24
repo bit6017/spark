@@ -464,6 +464,10 @@ private[spark] class ApplicationMaster(
     }
   }
 
+  /**
+   * 通过建立请求的方式，检查SparkDriver已经启动
+   * @return
+   */
   private def waitForSparkDriver(): RpcEndpointRef = {
     logInfo("Waiting for Spark driver to be reachable.")
     var driverUp = false
