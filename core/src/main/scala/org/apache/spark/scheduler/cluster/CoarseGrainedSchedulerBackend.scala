@@ -49,10 +49,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
   // Submit tasks only after (registered resources / total expected resources)
   // is equal to at least this value, that is double between 0 and 1.
+
+  /**这个参数控制分配到多少资源后可以开始启动任务提交*/
   var minRegisteredRatio =
     math.min(1, conf.getDouble("spark.scheduler.minRegisteredResourcesRatio", 0))
   // Submit tasks after maxRegisteredWaitingTime milliseconds
   // if minRegisteredRatio has not yet been reached
+
+  /**
+   * 如果在等待的时间还没有等到最小申请资源，那么也同样会提交作业，
+   * 也就是说，要限制最小资源生效，也得把等待时间设置很大，
+
+   */
   val maxRegisteredWaitingTimeMs =
     conf.getTimeAsMs("spark.scheduler.maxRegisteredResourcesWaitingTime", "30s")
   val createTime = System.currentTimeMillis()
@@ -78,6 +86,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // Executors that have been lost, but for which we don't yet know the real exit reason.
   protected val executorsPendingLossReason = new HashSet[String]
 
+  /**
+   * DriverEndpoint定义在 CoarGrainedSchedulerBackend中，动机是什么或者DriverEndpoint是干啥用的？
+   * @param rpcEnv
+   * @param sparkProperties
+   */
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
 
@@ -360,6 +373,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }
   }
 
+  /**
+   * 向Driver发送ReviveOffers消息，ReviveOffers干啥用的？
+   */
   override def reviveOffers() {
     driverEndpoint.send(ReviveOffers)
   }

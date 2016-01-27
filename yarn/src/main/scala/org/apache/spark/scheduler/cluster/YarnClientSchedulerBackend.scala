@@ -27,6 +27,8 @@ import org.apache.spark.launcher.SparkAppHandle
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
 /**
+ * SchedulerBackend干嘛的？
+ *
  * 以TaskSchedulerImpl和SparkContext作为构造参数
  * YarnClientSchedulerBackend继承自YarnSchedulerBackend，而YarnSchedulerBackend继承自CoarseGrainedSchedulerBackend
  * 因此，YarnClientSchedulerBackend也继承自CoarseGrainedSchedulerBackend
@@ -141,7 +143,7 @@ private[spark] class YarnClientSchedulerBackend(
    * If the application has finished, failed or been killed in the process, throw an exception.
    * This assumes both `client` and `appId` have already been set.
    *
-   * 等待Application运行起来
+   * 在YARN-Client模式下，Driver只会等待Application运行起来
    */
   private def waitForApplication(): Unit = {
     assert(client != null && appId.isDefined, "Application has not been submitted yet!")
