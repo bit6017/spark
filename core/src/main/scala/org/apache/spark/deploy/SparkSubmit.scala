@@ -490,6 +490,8 @@ object SparkSubmit {
 
     // In client mode, launch the application main class directly
     // In addition, add the main application jar and any added jars (if any) to the classpath
+
+    /**如果是Client Mode，那么要启动的进程就是Driver(用户程序的主类的main方法)*/
     if (deployMode == CLIENT) {
       childMainClass = args.mainClass
       if (isUserJar(args.primaryResource)) {

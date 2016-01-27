@@ -25,6 +25,14 @@ import org.apache.spark.deploy.yarn.{ApplicationMaster, YarnSparkHadoopUtil}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.Utils
 
+/**
+ * YARN-Cluster模式下的SchedulerBackend。
+ *
+ * 在 YARN-Cluster模式下是ApplicationMaster启动了Driver(Driver不是独立的进程)
+ * 在 YARN-Client模式下是Driver进程中请求RM创建ApplicationMaster
+ * @param scheduler
+ * @param sc
+ */
 private[spark] class YarnClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext)

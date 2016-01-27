@@ -2541,6 +2541,9 @@ object SparkContext extends Logging {
         /**
          * SchedulerBackend的实现类是org.apache.spark.scheduler.cluster.YarnClientSchedulerBackend，它是CoarseGrainedSchedulerBackend的子类
          * 以TaskSchedulerImpl和SparkContext作为构造参数
+         *
+         *  YarnClientSchedulerBackend负责启动ApplicationMaster进程，然后ApplicationMaster负责向RM申请资源
+         *
          */
         val backend = try {
           val clazz =

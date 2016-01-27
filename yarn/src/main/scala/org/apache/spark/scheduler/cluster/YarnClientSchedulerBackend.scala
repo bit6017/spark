@@ -46,7 +46,9 @@ private[spark] class YarnClientSchedulerBackend(
    * Create a Yarn client to submit an application to the ResourceManager.
    * This waits until the application is running.
    *
-   * 在TaskSchedulerImpl自类YarnScheduler中启动YarnClientSchedulerBackend
+   * 在TaskSchedulerImpl自类YarnScheduler中启动YarnClientSchedulerBackend。
+   *
+   * Driver负责启动ApplicationMaster进程，难道YarnClientSchedulerBackend是在Yarn-Client模式下使用的？是的！
    */
   override def start() {
 
