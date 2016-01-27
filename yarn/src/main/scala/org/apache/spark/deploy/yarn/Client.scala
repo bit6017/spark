@@ -57,8 +57,14 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.util.Utils
 
+/**
+ * Spark on YARN-CLIENT的入口点
+ * @param args
+ * @param hadoopConf
+ * @param sparkConf
+ */
 private[spark] class Client(
-    val args: ClientArguments,
+    val args: ClientArguments,  //客户端参数
     val hadoopConf: Configuration,
     val sparkConf: SparkConf)
   extends Logging {
@@ -69,14 +75,19 @@ private[spark] class Client(
     this(clientArgs, SparkHadoopUtil.get.newConfiguration(spConf), spConf)
 
   /**调用Hadoop YARN的YarnClient创建YarnClient实例，实际上是YarnClientImpl*/
+  /**YarnClient是Client与YARN ResourceManager进行RPC通信的接口*/
   private val yarnClient = YarnClient.createYarnClient
 
-  /**通过Hadoop的Configuration创建YarnConfiguration*/
+  /**基于Hadoop的Configuration创建YarnConfiguration*/
   private val yarnConf = new YarnConfiguration(hadoopConf)
   private var credentials: Credentials = null
   private val amMemoryOverhead = args.amMemoryOverhead // MB
   private val executorMemoryOverhead = args.executorMemoryOverhead // MB
   private val distCacheMgr = new ClientDistributedCacheManager()
+
+  /**
+   * 何谓集群模式？
+   */
   private val isClusterMode = args.isClusterMode
 
   private var loginFromKeytab = false
@@ -127,6 +138,8 @@ private[spark] class Client(
       // Setup the credentials before doing anything else,
       // so we have don't have issues at any point.
       setupCredentials()
+
+      /**初始化并启动YarnClient*/
       yarnClient.init(yarnConf)
       yarnClient.start()
 
@@ -137,6 +150,8 @@ private[spark] class Client(
         * YarnClientApplication包含了两方面的信息(这两方面的信息是构造YarnClientApplication的两个参数)
         * a.GetNewApplicationResponse
         * b.ApplicationSubmissionContext
+        *
+        * YarnClient的createApplication方法是创建Application，并没有真正的提交
         */
       val newApp = yarnClient.createApplication()
       val newAppResponse = newApp.getNewApplicationResponse()
@@ -147,9 +162,14 @@ private[spark] class Client(
       launcherBackend.setAppId(appId.toString())
 
       // Verify whether the cluster has enough resources for our AM
+
+      /** *
+        * 通过YarnClient的createApplication方法，ResourceManager会返回Yarn集群的资源信息
+        */
       verifyClusterResources(newAppResponse)
 
       // Set up the appropriate contexts to launch our AM
+
       /**ContainerLaunchContext封装了所有的用于NodeManager启动一个Container的信息，
         *  启动，commands封装了NodeManager要执行的命令
         *  此处是为ApplicationMaster启动Container所需的ContainerLaunchContext
@@ -170,6 +190,8 @@ private[spark] class Client(
        * 这是一个Blocking call，必须等待ResourceManager接受这个任务请求才返回，
        * 需要注意的是appContext本身已经包含了ApplicationId，而yarnClient.submitApplication也返回了这个ApplicationId
        * ApplicationId是通过调用yarnClient.createApplication方法返回的
+       *
+       * YarnClient的submitApplication就开始提交Application进行运行了，代码逻辑转到运行ApplicationMaster进程
        *
        */
       yarnClient.submitApplication(appContext)
@@ -873,7 +895,7 @@ private[spark] class Client(
       if (isClusterMode) {
         Utils.classForName("org.apache.spark.deploy.yarn.ApplicationMaster").getName
       } else {
-        Utils.classForName("org.apache.spark.deploy.yarn.ExecutorLauncher").getName
+        Utils.classForName("org.apache.spark.deploy.yarn.ExecutorLauncher").getName //ExecutorLauncher只是对ApplicationMaster进行了简单的封装
       }
     if (args.primaryRFile != null && args.primaryRFile.endsWith(".R")) {
       args.userArgs = ArrayBuffer(args.primaryRFile) ++ args.userArgs
@@ -1110,6 +1132,10 @@ private[spark] class Client(
 
 object Client extends Logging {
 
+  /**
+   * Spark on yarn-client的入口类
+   * @param argStrings
+   */
   def main(argStrings: Array[String]) {
     if (!sys.props.contains("SPARK_SUBMIT")) {
       logWarning("WARNING: This client is deprecated and will be removed in a " +

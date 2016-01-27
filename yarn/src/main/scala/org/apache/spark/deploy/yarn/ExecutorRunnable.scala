@@ -60,6 +60,9 @@ class ExecutorRunnable(
   val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
   lazy val env = prepareEnvironment(container)
 
+  /**
+   * Ask NodeManager启动Containter
+   */
   override def run(): Unit = {
     logInfo("Starting Executor Container")
     nmClient = NMClient.createNMClient()
@@ -119,6 +122,7 @@ class ExecutorRunnable(
 
     // Send the start request to the ContainerManager
     try {
+      /**启动Container，开始执行作业*/
       nmClient.startContainer(container, ctx)
     } catch {
       case ex: Exception =>
@@ -127,6 +131,17 @@ class ExecutorRunnable(
     }
   }
 
+  /**
+   * Executor执行的逻辑
+   * @param masterAddress
+   * @param slaveId
+   * @param hostname
+   * @param executorMemory
+   * @param executorCores
+   * @param appId
+   * @param localResources
+   * @return
+   */
   private def prepareCommand(
       masterAddress: String,
       slaveId: String,
@@ -222,7 +237,7 @@ class ExecutorRunnable(
       // 'something' to fail job ... akin to blacklisting trackers in mapred ?
       YarnSparkHadoopUtil.getOutOfMemoryErrorArgument) ++
       javaOpts ++
-      Seq("org.apache.spark.executor.CoarseGrainedExecutorBackend",
+      Seq("org.apache.spark.executor.CoarseGrainedExecutorBackend",  /**启动CoarseGrainedExecutorBackend进程*/
         "--driver-url", masterAddress.toString,
         "--executor-id", slaveId.toString,
         "--hostname", hostname.toString,

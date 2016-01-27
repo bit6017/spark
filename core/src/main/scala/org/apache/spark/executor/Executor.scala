@@ -116,15 +116,26 @@ private[spark] class Executor(
 
   startDriverHeartbeater()
 
+  /**
+   * 将Task封装为TaskRunner，提交到集群执行
+   * @param context
+   * @param taskId
+   * @param attemptNumber
+   * @param taskName
+   * @param serializedTask
+   */
   def launchTask(
       context: ExecutorBackend,
       taskId: Long,
       attemptNumber: Int,
       taskName: String,
       serializedTask: ByteBuffer): Unit = {
+    /**任务信息包装在serializedTask中*/
     val tr = new TaskRunner(context, taskId = taskId, attemptNumber = attemptNumber, taskName,
       serializedTask)
     runningTasks.put(taskId, tr)
+
+    /***提交到线程池中执行*/
     threadPool.execute(tr)
   }
 
@@ -150,6 +161,14 @@ private[spark] class Executor(
     ManagementFactory.getGarbageCollectorMXBeans.asScala.map(_.getCollectionTime).sum
   }
 
+  /**
+   * 任务体，实现了Runnable接口
+   * @param execBackend
+   * @param taskId
+   * @param attemptNumber
+   * @param taskName
+   * @param serializedTask
+   */
   class TaskRunner(
       execBackend: ExecutorBackend,
       val taskId: Long,

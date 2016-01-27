@@ -248,6 +248,8 @@ private[yarn] class YarnAllocator(
    * Update the set of container requests that we will sync with the RM based on the number of
    * executors we have currently running and our target number of executors.
    *
+   * 具体申请资源的方法
+   *
    * Visible for testing.
    */
   def updateResourceRequests(): Unit = {
@@ -277,7 +279,15 @@ private[yarn] class YarnAllocator(
         updatedNumContainer, numLocalityAwareTasks, hostToLocalTaskCounts,
           allocatedHostToContainersMap, localityMatched)
 
+      /**
+       * 申请Container
+       */
       for (locality <- containerLocalityPreferences) {
+
+        /**
+         * 创建ContainerRequest，并加入到AMRMClient中
+         *
+         */
         val request = createContainerRequest(resource, locality.nodes, locality.racks)
         amClient.addContainerRequest(request)
         val nodes = request.getNodes

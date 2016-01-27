@@ -33,6 +33,16 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.{ThreadUtils, Utils}
 
+/**
+ * CoarseGrainedExecutorBackend对应一个Executor，构造Coar
+ * @param rpcEnv
+ * @param driverUrl
+ * @param executorId
+ * @param hostPort
+ * @param cores
+ * @param userClassPath
+ * @param env
+ */
 private[spark] class CoarseGrainedExecutorBackend(
     override val rpcEnv: RpcEnv,
     driverUrl: String,
@@ -43,6 +53,9 @@ private[spark] class CoarseGrainedExecutorBackend(
     env: SparkEnv)
   extends ThreadSafeRpcEndpoint with ExecutorBackend with Logging {
 
+  /**
+   * CoarseGrainedExecutorBackend持有一个Executor对象，何时初始化？
+   */
   var executor: Executor = null
   @volatile var driver: Option[RpcEndpointRef] = None
 
@@ -50,6 +63,9 @@ private[spark] class CoarseGrainedExecutorBackend(
   // to be changed so that we don't share the serializer instance across threads
   private[this] val ser: SerializerInstance = env.closureSerializer.newInstance()
 
+  /**
+   * onStart方法何时运行？注册Executor
+   */
   override def onStart() {
     logInfo("Connecting to driver: " + driverUrl)
     rpcEnv.asyncSetupEndpointRefByURI(driverUrl).flatMap { ref =>
@@ -76,6 +92,10 @@ private[spark] class CoarseGrainedExecutorBackend(
   }
 
   override def receive: PartialFunction[Any, Unit] = {
+
+    /**
+     * 注册Executor成功，返回executor在哪台机器上
+     */
     case RegisteredExecutor(hostname) =>
       logInfo("Successfully registered with driver")
       executor = new Executor(executorId, hostname, env, userClassPath, isLocal = false)
@@ -84,13 +104,23 @@ private[spark] class CoarseGrainedExecutorBackend(
       logError("Slave registration failed: " + message)
       System.exit(1)
 
+    /**
+     *  收到Driver启动任务的请求
+     */
     case LaunchTask(data) =>
       if (executor == null) {
         logError("Received LaunchTask command but executor was null")
         System.exit(1)
       } else {
+
+        /**
+         * data是什么类型的?SerializableBuffer类型
+         * 任务信息包装在TaskDescription的serializedTask字段中
+         */
         val taskDesc = ser.deserialize[TaskDescription](data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
+
+        /**调用Executor的launchTask启动任务*/
         executor.launchTask(this, taskId = taskDesc.taskId, attemptNumber = taskDesc.attemptNumber,
           taskDesc.name, taskDesc.serializedTask)
       }
@@ -103,12 +133,18 @@ private[spark] class CoarseGrainedExecutorBackend(
         executor.killTask(taskId, interruptThread)
       }
 
+    /**
+     * 停止Executor
+     */
     case StopExecutor =>
       logInfo("Driver commanded a shutdown")
       // Cannot shutdown here because an ack may need to be sent back to the caller. So send
       // a message to self to actually do the shutdown.
       self.send(Shutdown)
 
+    /**
+     * 给自身发送Shutdown消息
+     */
     case Shutdown =>
       executor.stop()
       stop()
@@ -124,6 +160,12 @@ private[spark] class CoarseGrainedExecutorBackend(
     }
   }
 
+  /**
+   * 向Driver发送更新任务状态请求
+   * @param taskId
+   * @param state
+   * @param data
+   */
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
     val msg = StatusUpdate(executorId, taskId, state, data)
     driver match {
@@ -135,6 +177,16 @@ private[spark] class CoarseGrainedExecutorBackend(
 
 private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
+  /**
+   * 运行CoarseGrainedExecutorBackend
+   * @param driverUrl
+   * @param executorId
+   * @param hostname
+   * @param cores
+   * @param appId
+   * @param workerUrl
+   * @param userClassPath
+   */
   private def run(
       driverUrl: String,
       executorId: String,
@@ -195,6 +247,10 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       workerUrl.foreach { url =>
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
+
+      /**
+       * 等待运行结束
+       */
       env.rpcEnv.awaitTermination()
       SparkHadoopUtil.get.stopExecutorDelegationTokenRenewer()
     }

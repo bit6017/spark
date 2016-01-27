@@ -40,6 +40,9 @@ import org.apache.spark.util.Utils
  */
 private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logging {
 
+  /**
+   * AMRMClient，用于AM与RM进行通信
+   */
   private var amClient: AMRMClient[ContainerRequest] = _
   private var uiHistoryAddress: String = _
   private var registered: Boolean = false
@@ -61,6 +64,10 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
       uiHistoryAddress: String,
       securityMgr: SecurityManager
     ): YarnAllocator = {
+
+    /**
+     * 在register方法中初始化AMRMClient实例，然后调用init和start方法，这是模板方法
+     */
     amClient = AMRMClient.createAMRMClient()
     amClient.init(conf)
     amClient.start()
@@ -68,9 +75,17 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
 
     logInfo("Registering the ApplicationMaster")
     synchronized {
+
+      /**
+       * ApplicationMaster进程本身进行ApplicationMaster的注册
+       */
       amClient.registerApplicationMaster(Utils.localHostName(), 0, uiAddress)
       registered = true
     }
+
+    /**
+     * 创建YarnAllocator
+     */
     new YarnAllocator(driverUrl, driverRef, conf, sparkConf, amClient, getAttemptId(), args,
       securityMgr)
   }
@@ -83,6 +98,9 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
    */
   def unregister(status: FinalApplicationStatus, diagnostics: String = ""): Unit = synchronized {
     if (registered) {
+      /**
+       * Application执行完成后，注销，调用的是AMRMClient的unregisterApplicationMaster方法，同时传入查看历史记录的地址
+       */
       amClient.unregisterApplicationMaster(status, diagnostics, uiHistoryAddress)
     }
   }

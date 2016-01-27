@@ -47,6 +47,10 @@ private[spark] class ApplicationMaster(
 
   // Load the properties file with the Spark configuration and set entries as system properties,
   // so that user code run inside the AM also has access to them.
+
+  /**
+   * 设置系统变量
+   */
   if (args.propertiesFile != null) {
     Utils.getPropertiesFromFile(args.propertiesFile).foreach { case (k, v) =>
       sys.props(k) = v
@@ -57,8 +61,16 @@ private[spark] class ApplicationMaster(
   // optimal as more containers are available. Might need to handle this better.
 
   private val sparkConf = new SparkConf()
+
+  /**
+   * 为什么转换为了YarnConfiguration？
+   */
   private val yarnConf: YarnConfiguration = SparkHadoopUtil.get.newConfiguration(sparkConf)
     .asInstanceOf[YarnConfiguration]
+
+  /**
+   * 提供了userClass的就是集群模式，否则就是Client模式？
+   */
   private val isClusterMode = args.userClass != null
 
   // Default to twice the number of executors (twice the maximum number of executors if dynamic
@@ -150,6 +162,9 @@ private[spark] class ApplicationMaster(
         val maxAppAttempts = client.getMaxRegAttempts(sparkConf, yarnConf)
         val isLastAttempt = client.getAttemptId().getAttemptId() >= maxAppAttempts
 
+        /**
+         * finish应该是个阻塞方法，等待Application运行完成
+         */
         if (!finished) {
           // This happens when the user application calls System.exit(). We have the choice
           // of either failing or succeeding at this point. We report success to avoid
@@ -161,6 +176,9 @@ private[spark] class ApplicationMaster(
             "Shutdown hook called before final status was reported.")
         }
 
+        /**
+         * 注销Application
+         */
         if (!unregistered) {
           // we only want to unregister if we don't want the RM to retry
           if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
@@ -184,6 +202,9 @@ private[spark] class ApplicationMaster(
         delegationTokenRenewerOption.foreach(_.scheduleLoginFromKeytab())
       }
 
+      /**
+       * 如果是集群模式，那么需要运行Driver
+       */
       if (isClusterMode) {
         runDriver(securityMgr)
       } else {
@@ -225,6 +246,8 @@ private[spark] class ApplicationMaster(
         logInfo(s"Unregistering ApplicationMaster with $status" +
           Option(diagnostics).map(msg => s" (diag message: $msg)").getOrElse(""))
         unregistered = true
+
+        /**调用YarnRMClient的unregister方法，参数没有提供任何比如ApplicationID的信息，这些信息应该包含在YarnRMClient中**/
         client.unregister(status, Option(diagnostics).getOrElse(""))
       }
     }
@@ -264,6 +287,13 @@ private[spark] class ApplicationMaster(
     sparkContextRef.compareAndSet(sc, null)
   }
 
+  /**
+   * 注册AM
+   * @param _rpcEnv
+   * @param driverRef
+   * @param uiAddress
+   * @param securityMgr
+   */
   private def registerAM(
       _rpcEnv: RpcEnv,
       driverRef: RpcEndpointRef,
@@ -284,6 +314,8 @@ private[spark] class ApplicationMaster(
       _sparkConf.get("spark.driver.host"),
       _sparkConf.get("spark.driver.port").toInt,
       CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
+
+    /**获取YARN分区器*/
     allocator = client.register(driverUrl,
       driverRef,
       yarnConf,
@@ -316,8 +348,14 @@ private[spark] class ApplicationMaster(
     driverEndpoint
   }
 
+  /**
+   * 在YARN-Cluster模式下，Driver和ApplicationMaster运行在一起
+   * @param securityMgr
+   */
   private def runDriver(securityMgr: SecurityManager): Unit = {
     addAmIpFilter()
+
+    /**运行用户程序，这个程序就是Driver*/
     userClassThread = startUserApplication()
 
     // This a bit hacky, but we need to wait until the spark.driver.port property has
@@ -335,6 +373,8 @@ private[spark] class ApplicationMaster(
         sc.getConf.get("spark.driver.host"),
         sc.getConf.get("spark.driver.port"),
         isClusterMode = true)
+
+      /**注册AM*/
       registerAM(rpcEnv, driverRef, sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
       userClassThread.join()
     }
@@ -344,6 +384,8 @@ private[spark] class ApplicationMaster(
     val port = sparkConf.getInt("spark.yarn.am.port", 0)
     rpcEnv = RpcEnv.create("sparkYarnAM", Utils.localHostName, port, sparkConf, securityMgr,
       clientMode = true)
+
+    /**不启动Driver，但是会等待Driver运行起来*/
     val driverRef = waitForSparkDriver()
     addAmIpFilter()
     registerAM(rpcEnv, driverRef, sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
@@ -444,6 +486,10 @@ private[spark] class ApplicationMaster(
     }
   }
 
+  /**
+   * 等待用户程序中的SparkContext已经运行起来
+   * @return
+   */
   private def waitForSparkContextInitialized(): SparkContext = {
     logInfo("Waiting for spark context initialization")
     sparkContextRef.synchronized {
@@ -522,6 +568,9 @@ private[spark] class ApplicationMaster(
    * we assume it was successful, for all other cases we assume failure.
    *
    * Returns the user thread that was started.
+   *
+   * 启动用户程序，运行--user-class指定类的main方法
+   *
    */
   private def startUserApplication(): Thread = {
     logInfo("Starting the user application in a separate Thread")
@@ -659,10 +708,20 @@ object ApplicationMaster extends Logging {
 
   private var master: ApplicationMaster = _
 
+  /**
+   * ApplicationMaster进程的入口
+   * @param args
+   */
   def main(args: Array[String]): Unit = {
     SignalLogger.register(log)
+
+    /**
+     * 对提供给ApplicationMaster的命令行参数封装成ApplicationMasterArguments
+     */
     val amArgs = new ApplicationMasterArguments(args)
     SparkHadoopUtil.get.runAsSparkUser { () =>
+      /***创建ApplicationMaster的实例，并调用run方法**/
+      /**创建YarnRMClient,这个Client会封装AMRMClient，用于AM与RM进行通信**/
       master = new ApplicationMaster(amArgs, new YarnRMClient(amArgs))
       System.exit(master.run())
     }
@@ -685,6 +744,8 @@ object ApplicationMaster extends Logging {
 /**
  * This object does not provide any special functionality. It exists so that it's easy to tell
  * apart the client-mode AM from the cluster-mode AM when using tools such as ps or jps.
+ *
+ * ExecutorLauncher没有特别之处，依然是调用ApplicationMaster的main方法
  */
 object ExecutorLauncher {
 
