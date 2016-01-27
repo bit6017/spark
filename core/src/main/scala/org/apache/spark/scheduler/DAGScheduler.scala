@@ -593,7 +593,15 @@ class DAGScheduler(
 
     assert(partitions.size > 0)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
+
+    /**
+     * 创建JobWaiter对象
+     */
     val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
+
+    /**
+     * 发送JobSubmitted事件
+     */
     eventProcessLoop.post(JobSubmitted(
       jobId, rdd, func2, partitions.toArray, callSite, waiter,
       SerializationUtils.clone(properties)))
@@ -622,6 +630,10 @@ class DAGScheduler(
       resultHandler: (Int, U) => Unit,
       properties: Properties): Unit = {
     val start = System.nanoTime
+
+    /**调用DAGScheduler的submitJob方法，返回waiter，等待作业执行完成*/
+    /**waiter是JobWaiter类型的对象*/
+
     val waiter = submitJob(rdd, func, partitions, callSite, resultHandler, properties)
     Await.ready(waiter.completionFuture, atMost = Duration.Inf)
     waiter.completionFuture.value.get match {
@@ -838,6 +850,16 @@ class DAGScheduler(
     submitWaitingStages()
   }
 
+  /**
+   * 提交作业
+   * @param jobId
+   * @param finalRDD
+   * @param func
+   * @param partitions
+   * @param callSite
+   * @param listener
+   * @param properties
+   */
   private[scheduler] def handleJobSubmitted(jobId: Int,
       finalRDD: RDD[_],
       func: (TaskContext, Iterator[_]) => _,
@@ -873,8 +895,16 @@ class DAGScheduler(
     val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
     listenerBus.post(
       SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties))
+
+
+    /**
+     * 提交final stage
+     */
     submitStage(finalStage)
 
+    /**
+     * 提交等待的作业，从waitingStages中选取何时的Stage进行提交
+     */
     submitWaitingStages()
   }
 
@@ -925,14 +955,28 @@ class DAGScheduler(
 
   /** Submits stage, but first recursively submits any missing parents. */
   private def submitStage(stage: Stage) {
+
+    /**stage所属的job*/
     val jobId = activeJobForStage(stage)
     if (jobId.isDefined) {
       logDebug("submitStage(" + stage + ")")
+
+      /**
+       * 要提交的stage没有处于等待状态、运行状态和失败状态
+       */
       if (!waitingStages(stage) && !runningStages(stage) && !failedStages(stage)) {
+
+        /** *
+          * missing表示依赖的parent stage集合，以stage的id进行排序
+          */
         val missing = getMissingParentStages(stage).sortBy(_.id)
         logDebug("missing: " + missing)
         if (missing.isEmpty) {
           logInfo("Submitting " + stage + " (" + stage.rdd + "), which has no missing parents")
+
+          /**
+           * 提交stage还没有提交的tasks
+           */
           submitMissingTasks(stage, jobId.get)
         } else {
           for (parent <- missing) {
@@ -1019,6 +1063,7 @@ class DAGScheduler(
           JavaUtils.bufferToArray(closureSerializer.serialize((stage.rdd, stage.func): AnyRef))
       }
 
+      /**broadcast任务数据*/
       taskBinary = sc.broadcast(taskBinaryBytes)
     } catch {
       // In the case of a failure during serialization, abort the stage.
@@ -1034,6 +1079,9 @@ class DAGScheduler(
         return
     }
 
+    /**
+     * 创建任务集合，根据不同的stage(ShuffleMapStage还是ResultStage)，选择不同的任务
+     */
     val tasks: Seq[Task[_]] = try {
       stage match {
         case stage: ShuffleMapStage =>
@@ -1065,6 +1113,8 @@ class DAGScheduler(
       logInfo("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
       stage.pendingPartitions ++= tasks.map(_.partitionId)
       logDebug("New pending partitions: " + stage.pendingPartitions)
+
+      /**通过taskScheduler提交任务*/
       taskScheduler.submitTasks(new TaskSet(
         tasks.toArray, stage.id, stage.latestInfo.attemptId, jobId, properties))
       stage.latestInfo.submissionTime = Some(clock.getTimeMillis())
@@ -1618,7 +1668,15 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
     }
   }
 
+  /**
+   *
+   * @param event
+   */
   private def doOnReceive(event: DAGSchedulerEvent): Unit = event match {
+
+    /**
+     *  提交任务的消息
+      */
     case JobSubmitted(jobId, rdd, func, partitions, callSite, listener, properties) =>
       dagScheduler.handleJobSubmitted(jobId, rdd, func, partitions, callSite, listener, properties)
 

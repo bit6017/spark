@@ -174,10 +174,16 @@ private[spark] class TaskSchedulerImpl(
     waitBackendReady()
   }
 
+  /** *
+    * DAGScheduler调用TaskScheduler的这个方法提交任务，每次提交是TaskSet的任务集合
+    * @param taskSet
+    */
   override def submitTasks(taskSet: TaskSet) {
     val tasks = taskSet.tasks
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
+
+      /**创建TaskSetManager*/
       val manager = createTaskSetManager(taskSet, maxTaskFailures)
       val stage = taskSet.stageId
       val stageTaskSets =
@@ -190,6 +196,10 @@ private[spark] class TaskSchedulerImpl(
         throw new IllegalStateException(s"more than one active taskSet for stage $stage:" +
           s" ${stageTaskSets.toSeq.map{_._2.taskSet.id}.mkString(",")}")
       }
+
+      /**
+       * 将TaskSetManager加入到Pool中，关于此处还需要再看
+       */
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
 
       if (!isLocal && !hasReceivedTask) {
@@ -207,6 +217,10 @@ private[spark] class TaskSchedulerImpl(
       }
       hasReceivedTask = true
     }
+
+    /**
+     * 调用SchedulerBackend的reviveOffers方法，这个方法干啥的？
+     */
     backend.reviveOffers()
   }
 
@@ -293,6 +307,8 @@ private[spark] class TaskSchedulerImpl(
    * Called by cluster manager to offer resources on slaves. We respond by asking our active task
    * sets for tasks in order of priority. We fill each node with tasks in a round-robin manner so
    * that tasks are balanced across the cluster.
+   *
+   * 根据WorkerOffer信息，选择一组要运行的TaskDescription
    */
   def resourceOffers(offers: Seq[WorkerOffer]): Seq[Seq[TaskDescription]] = synchronized {
     // Mark each slave as alive and remember its hostname

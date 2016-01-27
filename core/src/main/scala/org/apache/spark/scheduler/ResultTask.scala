@@ -53,6 +53,11 @@ private[spark] class ResultTask[T, U](
     if (locs == null) Nil else locs.toSet.toSeq
   }
 
+  /**
+   * 执行ResultTask
+   * @param context
+   * @return
+   */
   override def runTask(context: TaskContext): U = {
     // Deserialize the RDD and the func using the broadcast variables.
     val deserializeStartTime = System.currentTimeMillis()
@@ -62,6 +67,10 @@ private[spark] class ResultTask[T, U](
     _executorDeserializeTime = System.currentTimeMillis() - deserializeStartTime
 
     metrics = Some(context.taskMetrics)
+
+    /**
+     * 执行func函数，这是一个RDD的action函数，比如count或者saveAsTextFile等
+     */
     func(context, rdd.iterator(partition, context))
   }
 

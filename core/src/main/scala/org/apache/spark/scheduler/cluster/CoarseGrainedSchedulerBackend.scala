@@ -132,8 +132,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
         }
 
+      /**
+       * 收到ReviveOffers消息后(谁发送过来的ReviveOffers消息?)，执行makeOffers方法
+       */
       case ReviveOffers =>
-        makeOffers()
+        makeOffers()  /**makeOffers方法是调用TaskScheduler的resourceOffers方法，该方法从一组Resource中选择合适的任务**/
 
       case KillTask(taskId, executorId, interruptThread) =>
         executorDataMap.get(executorId) match {
@@ -202,11 +205,29 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // Make fake resource offers on all executors
     private def makeOffers() {
       // Filter out executors under killing
+
+      /**过滤出active的executors*/
       val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
+
+      /**
+       *  创建WorkerOffer集合，每个WorkerOffer有executorHost以及freeCores信息
+       */
       val workOffers = activeExecutors.map { case (id, executorData) =>
         new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
       }.toSeq
-      launchTasks(scheduler.resourceOffers(workOffers))
+
+      /**
+       * 给定workOffers, 调度器根据workOffers分拣任务出来
+       * resourceOffers是Seq[Seq[TaskDescription]]集合
+       */
+      val seqOfTaskDescriptionSeq = scheduler.resourceOffers(workOffers);
+
+
+      /**
+       * 启动调度器返回的任务
+       */
+      launchTasks(seqOfTaskDescriptionSeq)
+
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -235,8 +256,18 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // Launch tasks returned by a set of resource offers
     private def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
+
+      /**tasks是二维集合，首先将起拉平成一维的集合*/
       for (task <- tasks.flatten) {
+
+        /**
+         * 任务(TaskDescription)序列化
+         */
         val serializedTask = ser.serialize(task)
+
+        /**
+         * 检查任务是否太大
+         */
         if (serializedTask.limit >= akkaFrameSize - AkkaUtils.reservedSizeBytes) {
           scheduler.taskIdToTaskSetManager.get(task.taskId).foreach { taskSetMgr =>
             try {
@@ -252,8 +283,15 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           }
         }
         else {
+          /**
+           * executor减掉被用掉的core个数(scheduler.CPUS_PER_TASK)
+           */
           val executorData = executorDataMap(task.executorId)
           executorData.freeCores -= scheduler.CPUS_PER_TASK
+
+          /**
+           * 发送LaunchTask消息，这是发送给谁的消息？给CoarseGrainedExecutorBackend
+           */
           executorData.executorEndpoint.send(LaunchTask(new SerializableBuffer(serializedTask)))
         }
       }

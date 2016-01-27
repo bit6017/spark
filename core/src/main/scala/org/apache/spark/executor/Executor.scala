@@ -203,6 +203,10 @@ private[spark] class Executor(
       Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = env.closureSerializer.newInstance()
       logInfo(s"Running $taskName (TID $taskId)")
+
+      /**
+       * 更新任务状态为运行
+       */
       execBackend.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
       var taskStart: Long = 0
       startGCTime = computeTotalGcTime()
@@ -230,6 +234,10 @@ private[spark] class Executor(
         taskStart = System.currentTimeMillis()
         var threwException = true
         val (value, accumUpdates) = try {
+
+          /**
+           * 执行具体的任务，task是Task类型，Task有两个子类，ShuffleMapTask和ResultTask
+           */
           val res = task.run(
             taskAttemptId = taskId,
             attemptNumber = attemptNumber,
