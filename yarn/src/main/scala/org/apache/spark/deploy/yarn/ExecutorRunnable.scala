@@ -42,6 +42,19 @@ import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
 
+/**
+  * 启动Container以在Container中运行Executor
+ * @param container
+ * @param conf
+ * @param sparkConf
+ * @param masterAddress
+ * @param slaveId
+ * @param hostname
+ * @param executorMemory
+ * @param executorCores
+ * @param appId
+ * @param securityMgr
+ */
 class ExecutorRunnable(
     container: Container,
     conf: Configuration,
@@ -62,21 +75,27 @@ class ExecutorRunnable(
 
   /**
    * Ask NodeManager启动Containter
+   *
+   * 启动NMClient的方式也是样板代码，每个线程持有一个nmClient实例
    */
   override def run(): Unit = {
     logInfo("Starting Executor Container")
     nmClient = NMClient.createNMClient()
     nmClient.init(yarnConf)
     nmClient.start()
+
+    /**启动Container*/
     startContainer()
   }
 
   def startContainer(): java.util.Map[String, ByteBuffer] = {
     logInfo("Setting up ContainerLaunchContext")
 
+    /**创建ContainerLaunchContext*/
     val ctx = Records.newRecord(classOf[ContainerLaunchContext])
       .asInstanceOf[ContainerLaunchContext]
 
+    /**准备资源*/
     val localResources = prepareLocalResources
     ctx.setLocalResources(localResources.asJava)
 
@@ -87,6 +106,11 @@ class ExecutorRunnable(
     credentials.writeTokenStorageToStream(dob)
     ctx.setTokens(ByteBuffer.wrap(dob.getData()))
 
+    /**
+     * NM启动Container要执行的命令，命令执行的主类是org.apache.spark.executor.CoarseGrainedExecutorBackend
+     * 也就是说，在Container中启动的进程是org.apache.spark.executor.CoarseGrainedExecutorBackend
+     *
+     */
     val commands = prepareCommand(masterAddress, slaveId, hostname, executorMemory, executorCores,
       appId, localResources)
 
@@ -122,7 +146,7 @@ class ExecutorRunnable(
 
     // Send the start request to the ContainerManager
     try {
-      /**启动Container，开始执行作业*/
+      /**启动Container，ExecutorBackend将向Driver注册，开始执行Driver的任务分配流程*/
       nmClient.startContainer(container, ctx)
     } catch {
       case ex: Exception =>

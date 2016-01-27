@@ -2215,6 +2215,9 @@ private[spark] object Utils extends Logging {
    * Dynamic allocation and explicitly setting the number of executors are inherently
    * incompatible. In environments where dynamic allocation is turned on by default,
    * the latter should override the former (SPARK-9092).
+   *
+   * isDynamicAllocationEnabled启动的条件是设置了spark.dynamicAllocation.enabled为true并且
+   * spark.executor.instances没有设置或者设置为0
    */
   def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
     conf.getBoolean("spark.dynamicAllocation.enabled", false) &&

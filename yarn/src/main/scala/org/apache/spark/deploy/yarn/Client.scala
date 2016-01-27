@@ -71,6 +71,12 @@ private[spark] class Client(
 
   import Client._
 
+  /**
+   * 创建Client
+   * @param clientArgs
+   * @param spConf
+   * @return
+   */
   def this(clientArgs: ClientArguments, spConf: SparkConf) =
     this(clientArgs, SparkHadoopUtil.get.newConfiguration(spConf), spConf)
 
@@ -151,7 +157,7 @@ private[spark] class Client(
         * a.GetNewApplicationResponse
         * b.ApplicationSubmissionContext
         *
-        * YarnClient的createApplication方法是创建Application，并没有真正的提交
+        * YarnClient的createApplication方法是创建Application，此时并没有有真正的提交，即ApplicationMaster并没有执行其main函数
         */
       val newApp = yarnClient.createApplication()
       val newAppResponse = newApp.getNewApplicationResponse()
@@ -1086,8 +1092,16 @@ private[spark] class Client(
    * Otherwise, the client process will exit after submission.
    * If the application finishes with a failed, killed, or undefined status,
    * throw an appropriate SparkException.
+   *
+   *
+   * Client进程是否退出决定于spark.yarn.submit.waitAppCompletion是否设置为true，这个参数在什么地方设置的？
    */
   def run(): Unit = {
+
+    /**
+     * 提交作业，在submitApplication方法中首先createApplication，然后填充ContainerLaunchContext以及ApplicationSubmissionContext，然后submitApplication
+     * 执行完这条语句的结果是ApplicationMaster开始运行
+     */
     this.appId = submitApplication()
     if (!launcherBackend.isConnected() && fireAndForget) {
       val report = getApplicationReport(appId)
@@ -1098,7 +1112,16 @@ private[spark] class Client(
         throw new SparkException(s"Application $appId finished with status: $state")
       }
     } else {
+
+      /**
+       * monitorApplication是阻塞方式监控Application，因为monitor的第二个参数returnOnRunning默认为false，
+       * 也就是ApplicationMaster运行起来后也不会退出
+       */
       val (yarnApplicationState, finalApplicationStatus) = monitorApplication(appId)
+
+      /**
+       * Application非正常运行结束(FAILED,KILLED，Undefined)，都会抛出SparkException异常
+       */
       if (yarnApplicationState == YarnApplicationState.FAILED ||
         finalApplicationStatus == FinalApplicationStatus.FAILED) {
         throw new SparkException(s"Application $appId finished with failed status")
@@ -1149,6 +1172,7 @@ object Client extends Logging {
 
     val args = new ClientArguments(argStrings, sparkConf)
     // to maintain backwards-compatibility
+    /**如果不是动态获取Executor，那么需要设置spark.executor.instances属性*/
     if (!Utils.isDynamicAllocationEnabled(sparkConf)) {
       sparkConf.setIfMissing("spark.executor.instances", args.numExecutors.toString)
     }

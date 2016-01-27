@@ -115,6 +115,8 @@ private[spark] object ShutdownHookManager extends Logging {
    *
    * Currently, this detects whether the JVM is shutting down by Runtime#addShutdownHook throwing
    * an IllegalStateException.
+   *
+   * 通过Runtime.getRuntime.addShutdownHook(hook)抛出IllegalStateException的方式检查JVM是否已经shutdown
    */
   def inShutdown(): Boolean = {
     try {

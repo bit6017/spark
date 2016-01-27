@@ -44,7 +44,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * @param env
  */
 private[spark] class CoarseGrainedExecutorBackend(
-    override val rpcEnv: RpcEnv,
+    override val rpcEnv: RpcEnv, /**指定了override表示什么含义？*/
     driverUrl: String,
     executorId: String,
     hostPort: String,
@@ -265,6 +265,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     var workerUrl: Option[String] = None
     val userClassPath = new mutable.ListBuffer[URL]()
 
+    /**解析出 CoarseGrainedExecutorBackend命令行参数*/
     var argv = args.toList
     while (!argv.isEmpty) {
       argv match {

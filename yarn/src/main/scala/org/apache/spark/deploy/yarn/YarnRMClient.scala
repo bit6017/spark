@@ -54,6 +54,8 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
    * @param sparkConf The Spark configuration.
    * @param uiAddress Address of the SparkUI.
    * @param uiHistoryAddress Address of the application on the History Server.
+   *
+   *  在ApplicationMaster进程中向RM注册ApplicationMaster？
    */
   def register(
       driverUrl: String,
@@ -67,6 +69,7 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
 
     /**
      * 在register方法中初始化AMRMClient实例，然后调用init和start方法，这是模板方法
+     * AMRMClient类用于AM和RM进行RPC通信
      */
     amClient = AMRMClient.createAMRMClient()
     amClient.init(conf)
@@ -77,7 +80,8 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
     synchronized {
 
       /**
-       * ApplicationMaster进程本身进行ApplicationMaster的注册
+       * ApplicationMaster进程本身进行ApplicationMaster的注册，
+       * 返回的是RegisterApplicationMasterResponse对象
        */
       amClient.registerApplicationMaster(Utils.localHostName(), 0, uiAddress)
       registered = true
@@ -85,6 +89,7 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
 
     /**
      * 创建YarnAllocator
+     * args信息都有什么？比如要多少个Container，Executor是否在这里指定的？
      */
     new YarnAllocator(driverUrl, driverRef, conf, sparkConf, amClient, getAttemptId(), args,
       securityMgr)

@@ -132,6 +132,10 @@ private[spark] class ApplicationMaster(
     client.getAttemptId()
   }
 
+  /**
+   * ApplicationMaster进程的主逻辑
+   * @return
+   */
   final def run(): Int = {
     try {
       val appAttemptId = client.getAttemptId()
@@ -163,7 +167,9 @@ private[spark] class ApplicationMaster(
         val isLastAttempt = client.getAttemptId().getAttemptId() >= maxAppAttempts
 
         /**
-         * finish应该是个阻塞方法，等待Application运行完成
+         * finish应该是个阻塞方法，等待Application运行完成？不是
+         *
+         * 这是干啥？
          */
         if (!finished) {
           // This happens when the user application calls System.exit(). We have the choice
@@ -203,11 +209,15 @@ private[spark] class ApplicationMaster(
       }
 
       /**
-       * 如果是集群模式，那么需要运行Driver
+       * 如果是集群模式，那么需要运行Driver，也就是说在ApplicationMaster进程中启动Driver
        */
       if (isClusterMode) {
         runDriver(securityMgr)
       } else {
+
+        /**
+         * 如果是Client模式，那么ApplicationMaster和Driver是两个独立的进程
+         */
         runExecutorLauncher(securityMgr)
       }
     } catch {
@@ -288,7 +298,7 @@ private[spark] class ApplicationMaster(
   }
 
   /**
-   * 注册AM
+   * 注册AM，为啥有driverRef这个参数？
    * @param _rpcEnv
    * @param driverRef
    * @param uiAddress
@@ -315,7 +325,7 @@ private[spark] class ApplicationMaster(
       _sparkConf.get("spark.driver.port").toInt,
       CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
 
-    /**获取YARN分区器*/
+    /**注册ApplicationMaster，返回YarnAllocator，注意注册的参数，都是driver的URL以及Driver的Endpoint信息*/
     allocator = client.register(driverUrl,
       driverRef,
       yarnConf,
@@ -324,6 +334,9 @@ private[spark] class ApplicationMaster(
       historyAddress,
       securityMgr)
 
+    /**
+     * 分配资源
+     */
     allocator.allocateResources()
     reporterThread = launchReporterThread()
   }
@@ -349,7 +362,7 @@ private[spark] class ApplicationMaster(
   }
 
   /**
-   * 在YARN-Cluster模式下，Driver和ApplicationMaster运行在一起
+   * 在YARN-Cluster模式下，Driver和ApplicationMaster运行在一个进程中
    * @param securityMgr
    */
   private def runDriver(securityMgr: SecurityManager): Unit = {
@@ -375,6 +388,7 @@ private[spark] class ApplicationMaster(
         isClusterMode = true)
 
       /**注册AM*/
+      /**与YarnRMClient的registerApplicationMaster有什么区别？registerAM方法会调用YarnRMClient的registerApplicationMaster方法*/
       registerAM(rpcEnv, driverRef, sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
       userClassThread.join()
     }
@@ -598,10 +612,15 @@ private[spark] class ApplicationMaster(
     val mainMethod = userClassLoader.loadClass(args.userClass)
       .getMethod("main", classOf[Array[String]])
 
+    /**
+     * 通过一个线程启动Driver进程，因此Driver就是ApplicationMaster的一个
+     */
     val userThread = new Thread {
       override def run() {
         try {
           mainMethod.invoke(null, userArgs.toArray)
+
+          /**此处为什么调用finish方法*/
           finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
           logDebug("Done running users class")
         } catch {
@@ -717,11 +736,15 @@ object ApplicationMaster extends Logging {
 
     /**
      * 对提供给ApplicationMaster的命令行参数封装成ApplicationMasterArguments
+     * ApplicationMasterArguments的构造参数是args， args是命令行参数
+     * args命令参数何时传入，传入哪些值？这是在Client的createContainerLaunchContext以及createApplicationSubmissionContext中
+     * @see
      */
     val amArgs = new ApplicationMasterArguments(args)
     SparkHadoopUtil.get.runAsSparkUser { () =>
       /***创建ApplicationMaster的实例，并调用run方法**/
       /**创建YarnRMClient,这个Client会封装AMRMClient，用于AM与RM进行通信**/
+      /**YarnRMClient的构造参数是ApplicationMasterArguments*/
       master = new ApplicationMaster(amArgs, new YarnRMClient(amArgs))
       System.exit(master.run())
     }

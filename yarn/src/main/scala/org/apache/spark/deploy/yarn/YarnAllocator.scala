@@ -114,6 +114,9 @@ private[yarn] class YarnAllocator(
   // Resource capability requested for each executors
   private[yarn] val resource = Resource.newInstance(executorMemory + memoryOverhead, executorCores)
 
+  /** *
+    * 用于启动Container的线程池，默认25个线程
+    */
   private val launcherPool = ThreadUtils.newDaemonCachedThreadPool(
     "ContainerLauncher",
     sparkConf.getInt("spark.yarn.containerLauncherMaxThreads", 25))
@@ -214,6 +217,10 @@ private[yarn] class YarnAllocator(
    * Deal with any containers YARN has granted to us by possibly launching executors in them.
    *
    * This must be synchronized because variables read in this method are mutated by other methods.
+   *
+   *
+   * 这个同步方法的处理逻辑如下
+   * 1. 申请资源
    */
   def allocateResources(): Unit = synchronized {
     updateResourceRequests()
@@ -221,10 +228,16 @@ private[yarn] class YarnAllocator(
     val progressIndicator = 0.1f
     // Poll the ResourceManager. This doubles as a heartbeat if there are no pending container
     // requests.
+
+    /**1. 申请Containter*/
     val allocateResponse = amClient.allocate(progressIndicator)
 
+    /**获得申请的Container*/
     val allocatedContainers = allocateResponse.getAllocatedContainers()
 
+    /**
+     * 如果申请到的Container个数大于0，调用handleAllocatedContainers对申请到Container进行使用
+     */
     if (allocatedContainers.size > 0) {
       logDebug("Allocated containers: %d. Current executor count: %d. Cluster resources: %s."
         .format(
@@ -329,12 +342,25 @@ private[yarn] class YarnAllocator(
    * in YARN granting containers that we no longer need. In this case, we release them.
    *
    * Visible for testing.
+   *
+   *
+   * 操纵分配到Container(每个Container的类型是Container)
    */
   def handleAllocatedContainers(allocatedContainers: Seq[Container]): Unit = {
+
+
+    /**
+     * 过滤出可以使用的Container
+     */
     val containersToUse = new ArrayBuffer[Container](allocatedContainers.size)
 
     // Match incoming requests by host
     val remainingAfterHostMatches = new ArrayBuffer[Container]
+
+    /**
+     * 遍历分配到的Container，调用matchContainerToRequest方法，这个方法的用途是将可用的Container填充到containersToUse集合中
+     *
+     */
     for (allocatedContainer <- allocatedContainers) {
       matchContainerToRequest(allocatedContainer, allocatedContainer.getNodeId.getHost,
         containersToUse, remainingAfterHostMatches)
@@ -363,6 +389,9 @@ private[yarn] class YarnAllocator(
       }
     }
 
+    /** *
+      * 启动分配到Container
+      */
     runAllocatedContainers(containersToUse)
 
     logInfo("Received %d containers from YARN, launching executors on %d of them."
@@ -374,10 +403,10 @@ private[yarn] class YarnAllocator(
    * finds one, removes the request so that it won't be submitted again. Places the container into
    * containersToUse or remaining.
    *
-   * @param allocatedContainer container that was given to us by YARN
+   * @param allocatedContainer container that was given to us by YARN YARN分配的Container集合
    * @param location resource name, either a node, rack, or *
-   * @param containersToUse list of containers that will be used
-   * @param remaining list of containers that will not be used
+   * @param containersToUse list of containers that will be used 可用的Container集合，初始值为空集合
+   * @param remaining list of containers that will not be used 初始值为空集合
    */
   private def matchContainerToRequest(
       allocatedContainer: Container,
@@ -394,20 +423,34 @@ private[yarn] class YarnAllocator(
       matchingResource)
 
     // Match the allocation to a request
+
+    /**如果matchingRequests不为空，那么将allocatedContainer加入到containersToUse集合中**/
     if (!matchingRequests.isEmpty) {
       val containerRequest = matchingRequests.get(0).iterator.next
+
+      /**
+       * 通知RM，之前containerRequest申请到的Container不是我想要的Container？
+       */
       amClient.removeContainerRequest(containerRequest)
       containersToUse += allocatedContainer
     } else {
+
+      /**将allocatedContainer加入到remaining集合中*/
       remaining += allocatedContainer
     }
   }
 
   /**
    * Launches executors in the allocated containers.
+   *
+   * 启动Container，应该调用访问NodeManager的NMClient的相关API
    */
   private def runAllocatedContainers(containersToUse: ArrayBuffer[Container]): Unit = {
     for (container <- containersToUse) {
+
+      /**
+       * 一个Container只能运一个Executor
+       */
       numExecutorsRunning += 1
       assert(numExecutorsRunning <= targetNumExecutors)
       val executorHostname = container.getNodeId.getHost
@@ -418,6 +461,10 @@ private[yarn] class YarnAllocator(
       assert(container.getResource.getMemory >= resource.getMemory)
 
       logInfo("Launching container %s for on host %s".format(containerId, executorHostname))
+
+      /**
+       * 建立Executor和Container之间的一一对应关系
+       */
       executorIdToContainer(executorId) = container
       containerIdToExecutorId(container.getId) = executorId
 
