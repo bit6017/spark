@@ -268,6 +268,15 @@ private[spark] class TaskSchedulerImpl(
       .format(manager.taskSet.id, manager.parent.name))
   }
 
+  /**
+   *
+   * @param taskSet
+   * @param maxLocality
+   * @param shuffledOffers
+   * @param availableCpus
+   * @param tasks
+   * @return
+   */
   private def resourceOfferSingleTaskSet(
       taskSet: TaskSetManager,
       maxLocality: TaskLocality,
@@ -314,9 +323,24 @@ private[spark] class TaskSchedulerImpl(
     // Mark each slave as alive and remember its hostname
     // Also track if new executor is added
     var newExecAvail = false
+
+    /**
+     * 遍历每个WorkerOffer
+     */
     for (o <- offers) {
+
+      /**更新executorIdToHost，executor的id和host的对应关系*/
       executorIdToHost(o.executorId) = o.host
+
+      /**
+       * 如果map中存在值为o.executorId的Key则返回，否则将map更新为0
+       */
       executorIdToTaskCount.getOrElseUpdate(o.executorId, 0)
+
+
+      /**
+       * 如果executorsByHost不存在值为o.host的Key，那么放入Executor
+       */
       if (!executorsByHost.contains(o.host)) {
         executorsByHost(o.host) = new HashSet[String]()
         executorAdded(o.executorId, o.host)
@@ -330,14 +354,31 @@ private[spark] class TaskSchedulerImpl(
     // Randomly shuffle offers to avoid always placing tasks on the same set of workers.
     val shuffledOffers = Random.shuffle(offers)
     // Build a list of tasks to assign to each worker.
+
+    /**
+     * shuffledOffers是经过洗牌的WorkerOffer集合，为什么每个元素都是o.cores？
+     */
     val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores))
+
+    /**
+     * 每个WorkerOffer的可用core个数
+     */
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
-    val sortedTaskSets = rootPool.getSortedTaskSetQueue
-    for (taskSet <- sortedTaskSets) {
+
+    /**
+     * 获得TaskSetManager集合
+     */
+    val sortedTaskSetManagers = rootPool.getSortedTaskSetQueue
+
+
+    /**
+     *
+     */
+    for (taskSetManager <- sortedTaskSetManagers) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
-        taskSet.parent.name, taskSet.name, taskSet.runningTasks))
+        taskSetManager.parent.name, taskSetManager.name, taskSetManager.runningTasks))
       if (newExecAvail) {
-        taskSet.executorAdded()
+        taskSetManager.executorAdded()
       }
     }
 
@@ -345,10 +386,10 @@ private[spark] class TaskSchedulerImpl(
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     // NOTE: the preferredLocality order: PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
     var launchedTask = false
-    for (taskSet <- sortedTaskSets; maxLocality <- taskSet.myLocalityLevels) {
+    for (taskSetManager <- sortedTaskSetManagers; maxLocality <- taskSetManager.myLocalityLevels) {
       do {
         launchedTask = resourceOfferSingleTaskSet(
-            taskSet, maxLocality, shuffledOffers, availableCpus, tasks)
+          taskSetManager, maxLocality, shuffledOffers, availableCpus, tasks)
       } while (launchedTask)
     }
 
