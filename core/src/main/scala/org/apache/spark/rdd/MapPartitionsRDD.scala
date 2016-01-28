@@ -42,6 +42,10 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
 
   /**
    * 该RDD之上的计算函数，它调用了MapPartitionsRDD传入的构造参数f
+   *
+   * 此处有递归调用的逻辑：
+   * 调用firstParent.iterator方法时，firstParent.iterator又去调用firstParent的compute方法，依次类推产生了pipeline调用
+   *
    * @param split 进行计算的分区号，每个Partition实质上是一个index
    * @param context Task上下文
    * @return

@@ -219,6 +219,10 @@ abstract class RDD[T: ClassTag](
   /**
    * Get the list of dependencies of this RDD, taking into account whether the
    * RDD is checkpointed or not.
+   *
+   *  如果checkpoint过，那么就是OneToOne依赖，否则就调用getDependencies获取依赖
+   *  getDependencies是子类可以重写的方法
+   *
    */
   final def dependencies: Seq[Dependency[_]] = {
     checkpointRDD.map(r => List(new OneToOneDependency(r))).getOrElse {
@@ -262,8 +266,17 @@ abstract class RDD[T: ClassTag](
    * Internal method to this RDD; will read from cache if applicable, or otherwise compute it.
    * This should ''not'' be called by users directly, but is available for implementors of custom
    * subclasses of RDD.
+   *
+   *  iterator是模板方法，它会调用具体RDD的compute方法
+   *
    */
   final def iterator(split: Partition, context: TaskContext): Iterator[T] = {
+
+    /**
+     * 如果RDD设置了StorageLevel，那么从CacheManager中读取；如果缓存的partition已经丢失，那么recompute
+     *
+     * 如果RDD没有设置StorageLevel,那么查看是否已经Checkpoint，如果没有checkpoint，则compute
+     */
     if (storageLevel != StorageLevel.NONE) {
       SparkEnv.get.cacheManager.getOrCompute(this, split, context, storageLevel)
     } else {
@@ -1541,6 +1554,9 @@ abstract class RDD[T: ClassTag](
 
   private[spark] def elementClassTag: ClassTag[T] = classTag[T]
 
+  /**
+   * 物化的RDD以RDDCheckpointData形式存放
+   */
   private[spark] var checkpointData: Option[RDDCheckpointData[T]] = None
 
   /** Returns the first parent RDD */

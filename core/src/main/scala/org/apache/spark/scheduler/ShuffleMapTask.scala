@@ -78,6 +78,8 @@ private[spark] class ShuffleMapTask(
        */
       val manager = SparkEnv.get.shuffleManager
       writer = manager.getWriter[Any, Any](dep.shuffleHandle, partitionId, context)
+
+      /***调用RDD的iterator方法遍历RDD的每条数据实现RDD写磁盘操作***/
       writer.write(rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
       writer.stop(success = true).get
     } catch {

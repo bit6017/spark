@@ -36,6 +36,8 @@ private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
  * @tparam K the key class.
  * @tparam V the value class.
  * @tparam C the combiner class.
+ *
+ *  为什么ShuffledRDD只依赖于一个RDD？是的，比如RDD.combineByKey，RDD.reduceByKey都是依赖一个RDD
  */
 // TODO: Make this return RDD[Product2[K, C]] or have some way to configure mutable pairs
 @DeveloperApi
@@ -76,6 +78,11 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
     this
   }
 
+  /**
+   * 获取ShuffledRDD的依赖，元素类型是Dependency，实际类型是ShuffleDependency，
+   * 此处返回的是长度为1的集合
+   * @return
+   */
   override def getDependencies: Seq[Dependency[_]] = {
     List(new ShuffleDependency(prev, part, serializer, keyOrdering, aggregator, mapSideCombine))
   }
@@ -92,6 +99,14 @@ class ShuffledRDD[K: ClassTag, V: ClassTag, C: ClassTag](
     tracker.getPreferredLocationsForShuffle(dep, partition.index)
   }
 
+  /**
+   * ShuffledRDD的数据是从Shuffle到磁盘的数据获取的，   从哪里读是如何控制的？
+   * dependencies函数是在RDD中定义的final的模板方法，它会调用子类重写的getDependencies方法。这里的dependencies只有一个元素，所以
+   * 可以使用head取出这个元素(类型是ShuffleDependency)
+   * @param split
+   * @param context
+   * @return
+   */
   override def compute(split: Partition, context: TaskContext): Iterator[(K, C)] = {
     val dep = dependencies.head.asInstanceOf[ShuffleDependency[K, V, C]]
     SparkEnv.get.shuffleManager.getReader(dep.shuffleHandle, split.index, split.index + 1, context)

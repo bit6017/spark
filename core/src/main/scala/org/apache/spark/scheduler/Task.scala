@@ -61,6 +61,8 @@ private[spark] abstract class Task[T](
    * @param taskAttemptId an identifier for this task attempt that is unique within a SparkContext.
    * @param attemptNumber how many times this task has been attempted (0 for the first attempt)
    * @return the result of the task along with updates of Accumulators.
+   *
+   *         这是模板方法，调用runTask以执行具体的任务逻辑
    */
   final def run(
     taskAttemptId: Long,
@@ -79,6 +81,9 @@ private[spark] abstract class Task[T](
       taskMemoryManager,
       metricsSystem,
       internalAccumulators)
+
+
+
     TaskContext.setTaskContext(context)
     context.taskMetrics.setHostname(Utils.localHostName())
     context.taskMetrics.setAccumulatorsUpdater(context.collectInternalAccumulators)
@@ -113,6 +118,11 @@ private[spark] abstract class Task[T](
     this.taskMemoryManager = taskMemoryManager
   }
 
+  /**
+   * runTask是Task的抽象类，交由ShuffleMapTask和ResultTask实现具体的处理逻辑
+   * @param context
+   * @return
+   */
   def runTask(context: TaskContext): T
 
   def preferredLocations: Seq[TaskLocation] = Nil
