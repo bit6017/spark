@@ -23,6 +23,12 @@ import org.apache.spark.{Partition, TaskContext}
 
 /**
  * An RDD that applies the provided function to every partition of the parent RDD.
+ *
+ * @param prev 该RDD依赖的父RDD
+ * @param f 作用于该RDD的一个分区上的计算函数，函数原型是 (TaskContext, Int, Iterator[T]) => Iterator[U]
+ * @param preservesPartitioning 是否保留父分区
+ * @tparam U 将类型U的元素转换为类型为T的函数
+ * @tparam T
  */
 private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     var prev: RDD[T],
@@ -34,6 +40,12 @@ private[spark] class MapPartitionsRDD[U: ClassTag, T: ClassTag](
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
+  /**
+   * 该RDD之上的计算函数，它调用了MapPartitionsRDD传入的构造参数f
+   * @param split 进行计算的分区号，每个Partition实质上是一个index
+   * @param context Task上下文
+   * @return
+   */
   override def compute(split: Partition, context: TaskContext): Iterator[U] =
     f(context, split.index, firstParent[T].iterator(split, context))
 

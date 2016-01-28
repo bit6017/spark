@@ -319,9 +319,17 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return a new RDD by applying a function to all elements of this RDD.
+   *
+   * map需要类型为T的元素，转换为类型为U的元素
    */
   def map[U: ClassTag](f: T => U): RDD[U] = withScope {
     val cleanF = sc.clean(f)
+
+    /**
+     *  MapPartitionsRDD构造参数有两个参数，依赖的RDD(this)，以及作用于RDD的一个partition上的计算方法 (context, pid, iter) => iter.map(cleanF)
+     *
+     *  问题：context，pid和iter何时传入？
+     */
     new MapPartitionsRDD[U, T](this, (context, pid, iter) => iter.map(cleanF))
   }
 

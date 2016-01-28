@@ -67,6 +67,10 @@ private[spark] abstract class Task[T](
     attemptNumber: Int,
     metricsSystem: MetricsSystem)
   : (T, AccumulatorUpdates) = {
+
+    /**
+     * 创建任务执行的Context，类型为TaskContext
+     */
     context = new TaskContextImpl(
       stageId,
       partitionId,
