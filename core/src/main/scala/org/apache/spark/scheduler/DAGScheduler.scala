@@ -1206,8 +1206,12 @@ class DAGScheduler(
         listenerBus.post(SparkListenerTaskEnd(stageId, stage.latestInfo.attemptId, taskType,
           event.reason, event.taskInfo, event.taskMetrics))
         stage.pendingPartitions -= task.partitionId
+
+        /**
+         * 对结果进行处理
+         */
         task match {
-          case rt: ResultTask[_, _] =>
+          case rt: ResultTask[_, _] => /**如果是ResultTask，那么任务成功需要结束Job*/
             // Cast to ResultStage here because it's part of the ResultTask
             // TODO Refactor this out to a function that accepts a ResultStage
             val resultStage = stage.asInstanceOf[ResultStage]
@@ -1239,9 +1243,17 @@ class DAGScheduler(
                 logInfo("Ignoring result from " + rt + " because its job has finished")
             }
 
+          /**
+           * 如果是ShuffleMapTask
+           *
+           */
           case smt: ShuffleMapTask =>
             val shuffleStage = stage.asInstanceOf[ShuffleMapStage]
             updateAccumulators(event)
+
+            /**
+             * 从结果中取出MapStatus对象
+             */
             val status = event.result.asInstanceOf[MapStatus]
             val execId = status.location.executorId
             logDebug("ShuffleMapTask finished on " + execId)

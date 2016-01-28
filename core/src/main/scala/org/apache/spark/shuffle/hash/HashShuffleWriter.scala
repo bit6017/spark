@@ -69,7 +69,9 @@ private[spark] class HashShuffleWriter[K, V](
     }
   }
 
-  /** Close this writer, passing along whether the map completed */
+  /** Close this writer, passing along whether the map completed
+    *   关闭写文件操作，同时更新MapStatus状态
+    */
   override def stop(initiallySuccess: Boolean): Option[MapStatus] = {
     var success = initiallySuccess
     try {
@@ -102,6 +104,10 @@ private[spark] class HashShuffleWriter[K, V](
     }
   }
 
+  /**
+   * 结束写操作，并且提交MapStatus信息
+   * @return
+   */
   private def commitWritesAndBuildStatus(): MapStatus = {
     // Commit the writes. Get the size of each bucket block (total block size).
     val sizes: Array[Long] = shuffle.writers.map { writer: DiskBlockObjectWriter =>

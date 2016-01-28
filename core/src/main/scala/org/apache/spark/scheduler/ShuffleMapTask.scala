@@ -74,7 +74,7 @@ private[spark] class ShuffleMapTask(
     var writer: ShuffleWriter[Any, Any] = null
     try {
       /**
-       * 写RDD的数据到磁盘
+       * 写RDD的数据到磁盘,同时要更新MapStatus信息，这个信息用于Shuffle下游读取数据
        */
       val manager = SparkEnv.get.shuffleManager
       writer = manager.getWriter[Any, Any](dep.shuffleHandle, partitionId, context)

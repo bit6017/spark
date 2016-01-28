@@ -68,7 +68,7 @@ private[spark] abstract class Task[T](
     taskAttemptId: Long,
     attemptNumber: Int,
     metricsSystem: MetricsSystem)
-  : (T, AccumulatorUpdates) = {
+  : (T, AccumulatorUpdates) = {   /**返回的数据类型是一个二元组，第一个元素的类型是T，第二个类型是AccumulatorUpdates，对于ShuffleMapTask而言，T就是MapStatus*/
 
     /**
      * 创建任务执行的Context，类型为TaskContext
@@ -92,6 +92,11 @@ private[spark] abstract class Task[T](
       kill(interruptThread = false)
     }
     try {
+
+      /**
+       * 这个二元组就是方法的执行结果，第一个元素类型是T，第二个元素类型是AccumulatorUpdates，
+       * AccumulatorUpdates其实是 Map[Long, Any]的别名
+       */
       (runTask(context), context.collectAccumulators())
     } finally {
       context.markTaskCompleted()

@@ -101,6 +101,10 @@ private[spark] class TaskContextImpl(
     accumulators.filter(_._2.isInternal).mapValues(_.localValue).toMap
   }
 
+  /**
+   * 返回的结果是Map[Long, Any]
+   * @return
+   */
   private[spark] override def collectAccumulators(): Map[Long, Any] = synchronized {
     accumulators.mapValues(_.localValue).toMap
   }
