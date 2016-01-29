@@ -233,6 +233,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         SparkHadoopUtil.get.startExecutorDelegationTokenRenewer(driverConf)
       }
 
+      /**
+       * 创建ExecutorEnv
+       */
       val env = SparkEnv.createExecutorEnv(
         driverConf, executorId, hostname, port, cores, isLocal = false)
 
@@ -249,13 +252,18 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       }
 
       /**
-       * 等待运行结束
+       * 等待运行结束，这是等待谁执行完？其实是等待Dispatcher的线程池shutdown
+       * Dispatcher的stop方法运行后，就会调用Dispatcher的线程池shutdown
        */
       env.rpcEnv.awaitTermination()
       SparkHadoopUtil.get.stopExecutorDelegationTokenRenewer()
     }
   }
 
+  /**
+   * 执行Executor侧的Backend，执行run方法的时候会创建Executor侧的SparkEnv
+   * @param args
+   */
   def main(args: Array[String]) {
     var driverUrl: String = null
     var executorId: String = null

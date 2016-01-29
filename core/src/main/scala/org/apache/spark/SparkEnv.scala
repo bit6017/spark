@@ -149,6 +149,9 @@ class SparkEnv (
   }
 }
 
+/**
+ * SparkEnv在Driver和Executor都有这个对象实例，也就是说，在Executor上执行SparkEnv.get将获得Executor上的SparkEnv
+ */
 object SparkEnv extends Logging {
   @volatile private var env: SparkEnv = _
 
@@ -226,6 +229,8 @@ object SparkEnv extends Logging {
 
   /**
    * Helper method to create a SparkEnv for a driver or an executor.
+   *
+   * SparkEnv在Executor上也有
    */
   private def create(
       conf: SparkConf,

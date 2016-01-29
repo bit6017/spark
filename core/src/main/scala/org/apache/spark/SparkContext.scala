@@ -1715,6 +1715,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   // Shut down the SparkContext.
+
+  /**
+   * CoarseGrainedBackend进程会在SparkContext调用stop时关闭
+   */
   def stop() {
     if (AsynchronousListenerBus.withinListenerThread.value) {
       throw new SparkException("Cannot stop SparkContext within listener thread of" +
