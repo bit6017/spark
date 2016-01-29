@@ -49,7 +49,7 @@ import org.apache.spark.util.io.ByteArrayChunkOutputStream
  *
  * When initialized, TorrentBroadcast objects read SparkEnv.get.conf.
  *
- * @param obj object to broadcast
+ * @param obj object to broadcast obj何时传入的？
  * @param id A unique identifier for the broadcast variable.
  */
 private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
@@ -60,11 +60,15 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
    * which builds this value by reading blocks from the driver and/or other executors.
    *
    * On the driver, if the value is required, it is read lazily from the block manager.
+   *
+   * lazy变量，也就是说只有使用的时候才会初始化
    */
   @transient private lazy val _value: T = readBroadcastBlock()
 
   /** The compression codec to use, or None if compression is disabled */
   @transient private var compressionCodec: Option[CompressionCodec] = _
+
+
   /** Size of each block. Default value is 4MB.  This value is only read by the broadcaster. */
   @transient private var blockSize: Int = _
 
@@ -81,7 +85,11 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
 
   private val broadcastId = BroadcastBlockId(id)
 
-  /** Total number of blocks this broadcast variable contains. */
+  /**
+    *Total number of blocks this broadcast variable contains.
+   *
+   * 将广播的数据obj写Block
+    */
   private val numBlocks: Int = writeBlocks(obj)
 
   override protected def getValue() = {
@@ -96,10 +104,19 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   private def writeBlocks(value: T): Int = {
     // Store a copy of the broadcast variable in the driver so that tasks run on the driver
     // do not create a duplicate copy of the broadcast variable's value.
+
+    /**写到Driver的BlockManager，没有进行拆分Block*/
     SparkEnv.get.blockManager.putSingle(broadcastId, value, StorageLevel.MEMORY_AND_DISK,
       tellMaster = false)
+
+
+    /**
+     * 拆分为多个Block，blocks是类型是Array[ByteBuffer]，也就是说，每个Block是一个ByteBuffer
+     */
     val blocks =
       TorrentBroadcast.blockifyObject(value, blockSize, SparkEnv.get.serializer, compressionCodec)
+
+
     blocks.zipWithIndex.foreach { case (block, i) =>
       SparkEnv.get.blockManager.putBytes(
         BroadcastBlockId(id, "piece" + i),
@@ -163,22 +180,42 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   }
 
   private def readBroadcastBlock(): T = Utils.tryOrIOException {
+
+    /**同步方法*/
     TorrentBroadcast.synchronized {
       setConf(SparkEnv.get.conf)
+
+      /**
+       * 从本地的BlockManager里面读取数据
+       */
       SparkEnv.get.blockManager.getLocal(broadcastId).map(_.data.next()) match {
+
+          /**如果在本地BlockManager里找到了，则返回*/
         case Some(x) =>
           x.asInstanceOf[T]
 
+          /**如果在本地BlockManager中找不到，那么读取*/
         case None =>
           logInfo("Started reading broadcast variable " + id)
           val startTimeMs = System.currentTimeMillis()
+
+          /**
+           * 读取块
+           */
           val blocks = readBlocks()
           logInfo("Reading broadcast variable " + id + " took" + Utils.getUsedTimeMs(startTimeMs))
 
+          /**
+           * 将块数据组装成Broadcast数据
+           */
           val obj = TorrentBroadcast.unBlockifyObject[T](
             blocks, SparkEnv.get.serializer, compressionCodec)
           // Store the merged copy in BlockManager so other tasks on this executor don't
           // need to re-fetch it.
+
+          /**
+            * 这里是存放到全局的BlockManager里，如何通知Driver，Executor已经有了Block
+            */
           SparkEnv.get.blockManager.putSingle(
             broadcastId, obj, StorageLevel.MEMORY_AND_DISK, tellMaster = false)
           obj
@@ -191,12 +228,29 @@ private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
 
 private object TorrentBroadcast extends Logging {
 
+  /**
+   * 将广播数据分块
+   * @param obj 要分块储存的广播数据
+   * @param blockSize 每个块的大小
+   * @param serializer 序列化方法
+   * @param compressionCodec 压缩算法
+   * @tparam T
+   * @return
+   */
   def blockifyObject[T: ClassTag](
       obj: T,
       blockSize: Int,
       serializer: Serializer,
       compressionCodec: Option[CompressionCodec]): Array[ByteBuffer] = {
+
+    /**
+     *
+     */
     val bos = new ByteArrayChunkOutputStream(blockSize)
+
+    /**
+     * 压缩，序列化
+     */
     val out: OutputStream = compressionCodec.map(c => c.compressedOutputStream(bos)).getOrElse(bos)
     val ser = serializer.newInstance()
     val serOut = ser.serializeStream(out)

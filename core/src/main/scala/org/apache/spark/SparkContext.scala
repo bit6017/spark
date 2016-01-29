@@ -1350,15 +1350,23 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Broadcast a read-only variable to the cluster, returning a
    * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
    * The variable will be sent to each cluster only once.
+   *
+   * 广播一个value对象
    */
   def broadcast[T: ClassTag](value: T): Broadcast[T] = {
     assertNotStopped()
     if (classOf[RDD[_]].isAssignableFrom(classTag[T].runtimeClass)) {
       // This is a warning instead of an exception in order to avoid breaking user programs that
       // might have created RDD broadcast variables but not used them:
+
+      /**不能直接broadcast RDD，需要对RDD进行计算得到结果再broadcast**/
       logWarning("Can not directly broadcast RDDs; instead, call collect() and "
         + "broadcast the result (see SPARK-5063)")
     }
+
+    /**
+     * 调用Env的broadcastManager的newBroadcast方法创建Broadcast对象
+     */
     val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
     val callSite = getCallSite
     logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)

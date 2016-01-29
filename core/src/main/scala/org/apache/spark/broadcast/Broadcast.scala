@@ -51,6 +51,8 @@ import org.apache.spark.util.Utils
  * that all nodes get the same value of the broadcast variable (e.g. if the variable is shipped
  * to a new node later).
  *
+ * BroadCast的构造函数是一个Long类型的id标识
+ *
  * @param id A unique identifier for the broadcast variable.
  * @tparam T Type of the data contained in the broadcast variable.
  */
@@ -64,7 +66,12 @@ abstract class Broadcast[T: ClassTag](val id: Long) extends Serializable with Lo
 
   private var _destroySite = ""
 
-  /** Get the broadcasted value. */
+  /** Get the broadcasted value.
+    *
+    *  在RDD的函数代码中通过value函数获取Broadcast的值，
+    *  此处应该有拉取Broadcast Value的逻辑？看getValue()方法的实现，并没有这个逻辑，直接返回了Broadcast持有的一个变量
+    *
+    */
   def value: T = {
     assertValid()
     getValue()

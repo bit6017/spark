@@ -52,6 +52,10 @@ private[spark] class BroadcastManager(
   private val nextBroadcastId = new AtomicLong(0)
 
   def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean): Broadcast[T] = {
+
+    /**
+     * 调用TorrentBroadcastFactory的newBroadcast方法
+     */
     broadcastFactory.newBroadcast[T](value_, isLocal, nextBroadcastId.getAndIncrement())
   }
 
