@@ -51,6 +51,8 @@ import org.apache.spark.util.{NextIterator, SerializableConfiguration, ShutdownH
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
+ *
+ * HadoopPartition关联一个Hadoop的InputSplit
  */
 private[spark] class HadoopPartition(rddId: Int, idx: Int, s: InputSplit)
   extends Partition {
@@ -192,11 +194,23 @@ class HadoopRDD[K, V](
     newInputFormat
   }
 
+  /**
+   * 计算每个分区
+   * @return
+   */
   override def getPartitions: Array[Partition] = {
     val jobConf = getJobConf()
     // add the credentials here as this can be called before SparkContext initialized
     SparkHadoopUtil.get.addCredentials(jobConf)
+
+    /**
+     * 获取出InputFormat
+     */
     val inputFormat = getInputFormat(jobConf)
+
+    /**
+     * 从inputFormat中获取split信息
+     */
     val inputSplits = inputFormat.getSplits(jobConf, minPartitions)
     val array = new Array[Partition](inputSplits.size)
     for (i <- 0 until inputSplits.size) {
@@ -205,6 +219,12 @@ class HadoopRDD[K, V](
     array
   }
 
+  /**
+   * 对分区进行计算
+   * @param theSplit
+   * @param context
+   * @return
+   */
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
     val iter = new NextIterator[(K, V)] {
 

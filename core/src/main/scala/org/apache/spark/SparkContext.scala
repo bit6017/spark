@@ -41,6 +41,12 @@ import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, Doub
   FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat,
   TextInputFormat}
+
+/**
+ * 将mapreduce包下面的InputFormat改名为NewInputFormat，
+ * 将mapreduce包下面的Job改名为NewHadoopJob
+ * 将.mapreduce.lib.input包下面的FileInputFormat改名为NewFileInputFormat
+ */
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.mesos.MesosNativeLibrary
@@ -868,6 +874,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       path: String,
       minPartitions: Int = defaultMinPartitions): RDD[String] = withScope {
     assertNotStopped()
+
+    /**
+     * 将RDD[K,V]转换为RDD[V]
+     */
     hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
       minPartitions).map(pair => pair._2.toString).setName(path)
   }
@@ -1050,8 +1060,24 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       minPartitions: Int = defaultMinPartitions): RDD[(K, V)] = withScope {
     assertNotStopped()
     // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
+
+    /**
+     * broadcast配置文件
+     */
     val confBroadcast = broadcast(new SerializableConfiguration(hadoopConfiguration))
+
+    /**
+     * 设置输入文件的路径到JobConf的函数
+     */
     val setInputPathsFunc = (jobConf: JobConf) => FileInputFormat.setInputPaths(jobConf, path)
+
+
+    /**
+     * 创建HadoopRDD，需要考虑
+     * 1. 分区数是多少，
+     * 2. 每个分区的数据怎么计算得到？
+     *
+     */
     new HadoopRDD(
       this,
       confBroadcast,
@@ -1125,6 +1151,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * operation will create many references to the same object.
    * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
    * copy them using a `map` function.
+   *
+   *  通过newAPIHadoopFile获得的RDD不能直接进行cache、sort和aggregate，首先进行map转换
+   *  K,V是InputFormat的K,V；F是InputFormat
+   *
    */
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](
       path: String,
@@ -1135,11 +1165,24 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     assertNotStopped()
     // The call to NewHadoopJob automatically adds security credentials to conf,
     // so we don't need to explicitly add them ourselves
+
+    /**
+     * 创建Hadoop的Job实例
+     */
     val job = NewHadoopJob.getInstance(conf)
     // Use setInputPaths so that newAPIHadoopFile aligns with hadoopFile/textFile in taking
     // comma separated files as input. (see SPARK-7155)
+    /** *
+      *  将输入的文件路径写到job对应的Configuration中
+      */
     NewFileInputFormat.setInputPaths(job, path)
+
+
     val updatedConf = job.getConfiguration
+
+    /**
+     * NewHadoopRDD关联的Hadoop Configuration是包含了设置了InputPaths信息的Configuration
+     */
     new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf).setName(path)
   }
 
@@ -1180,6 +1223,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     * operation will create many references to the same object.
     * If you plan to directly cache, sort, or aggregate Hadoop writable objects, you should first
     * copy them using a `map` function.
+    *
+    * InputFormat是SequenceFileInputFormat
     */
   def sequenceFile[K, V](path: String,
       keyClass: Class[K],
