@@ -119,6 +119,12 @@ private[deploy] class Master(
 
   private var recoveryCompletionTask: ScheduledFuture[_] = _
 
+  /**
+   *  Worker超时检查线程，如果Worker在指定时间没有收到心跳信息，如果超时，要做哪些事情
+   *  1. 将此Worker干掉，
+   *  2. 是否需要通知Driver，Worker丢了？是的
+   *  3. 恢复作业执行？
+   */
   private var checkForWorkerTimeOutTask: ScheduledFuture[_] = _
 
   // As a temporary workaround before better ways of configuring memory, we allow users to set
@@ -256,6 +262,9 @@ private[deploy] class Master(
       }
     }
 
+    /**
+     * Master处理ExecutorStateChanged事件
+     */
     case ExecutorStateChanged(appId, execId, state, message, exitStatus) => {
       val execOption = idToApp.get(appId).flatMap(app => app.executors.get(execId))
       execOption match {
@@ -270,6 +279,9 @@ private[deploy] class Master(
             appInfo.resetRetryCount()
           }
 
+          /**
+           * Master给ExecutorUpdated发送Executor状态更新事件
+           */
           exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus))
 
           if (ExecutorState.isFinished(state)) {
@@ -285,6 +297,7 @@ private[deploy] class Master(
             val normalExit = exitStatus == Some(0)
             // Only retry certain number of times so we don't go into an infinite loop.
             if (!normalExit) {
+              //重试
               if (appInfo.incrementRetryCount() < ApplicationState.MAX_NUM_RETRY) {
                 schedule()
               } else {
@@ -312,6 +325,9 @@ private[deploy] class Master(
       }
     }
 
+    /**
+     * 收到Worker的心跳信息，更新最后一次的心跳时间
+     */
     case Heartbeat(workerId, worker) => {
       idToWorker.get(workerId) match {
         case Some(workerInfo) =>
@@ -373,6 +389,10 @@ private[deploy] class Master(
       idToApp.get(applicationId).foreach(finishApplication)
 
     case CheckForWorkerTimeOut => {
+
+      /**
+       * 检查DeadWorkers
+       */
       timeOutDeadWorkers()
     }
 
@@ -754,6 +774,11 @@ private[deploy] class Master(
     true
   }
 
+
+  /**
+   * 删除一个Worker的逻辑
+   * @param worker
+   */
   private def removeWorker(worker: WorkerInfo) {
     logInfo("Removing worker " + worker.id + " on " + worker.host + ":" + worker.port)
     worker.setState(WorkerState.DEAD)
@@ -1024,6 +1049,9 @@ private[deploy] class Master(
   private def timeOutDeadWorkers() {
     // Copy the workers into an array so we don't modify the hashset while iterating through it
     val currentTime = System.currentTimeMillis()
+    /**
+     * 60秒没有收到Worker心跳信息的认为已经Dead
+     */
     val toRemove = workers.filter(_.lastHeartbeat < currentTime - WORKER_TIMEOUT_MS).toArray
     for (worker <- toRemove) {
       if (worker.state != WorkerState.DEAD) {

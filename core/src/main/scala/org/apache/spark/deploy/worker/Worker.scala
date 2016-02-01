@@ -69,6 +69,9 @@ private[deploy] class Worker(
   // For worker and executor IDs
   private def createDateFormat = new SimpleDateFormat("yyyyMMddHHmmss")
   // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
+
+  //spark.worker.timeout这个数字是以秒为单位，默认worker的超时时间是1分钟
+  //心跳间隔是超时时间的1/4
   private val HEARTBEAT_MILLIS = conf.getLong("spark.worker.timeout", 60) * 1000 / 4
 
   // Model retries to connect to the master, after Hadoop's model.
@@ -351,6 +354,10 @@ private[deploy] class Worker(
 
   private def handleRegisterResponse(msg: RegisterWorkerResponse): Unit = synchronized {
     msg match {
+
+      /**
+       * 注册到Master之后，启动发送心跳信息的线程
+       */
       case RegisteredWorker(masterRef, masterWebUiUrl) =>
         logInfo("Successfully registered with master " + masterRef.address.toSparkURL)
         registered = true
@@ -382,6 +389,10 @@ private[deploy] class Worker(
   }
 
   override def receive: PartialFunction[Any, Unit] = synchronized {
+
+    /** *
+      * 向Master发送信息条信息，包括workerId
+      */
     case SendHeartbeat =>
       if (connected) { sendToMaster(Heartbeat(workerId, self)) }
 
@@ -580,6 +591,10 @@ private[deploy] class Worker(
    * master, the message will be dropped.
    */
   private def sendToMaster(message: Any): Unit = {
+
+    /** *
+      *  给谁发消息，就调用谁的send方法，此处是给Master发消息，因此，此处调用masterRef的send方法
+      */
     master match {
       case Some(masterRef) => masterRef.send(message)
       case None =>

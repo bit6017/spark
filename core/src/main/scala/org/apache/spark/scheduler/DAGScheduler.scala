@@ -1211,7 +1211,7 @@ class DAGScheduler(
          * 对结果进行处理
          */
         task match {
-          case rt: ResultTask[_, _] => /**如果是ResultTask，那么任务成功需要结束Job*/
+          case rt: ResultTask[_, _] => /**如果是ResultTask，那么需要结束Job*/
             // Cast to ResultStage here because it's part of the ResultTask
             // TODO Refactor this out to a function that accepts a ResultStage
             val resultStage = stage.asInstanceOf[ResultStage]
@@ -1361,7 +1361,7 @@ class DAGScheduler(
           }
         }
 
-      case commitDenied: TaskCommitDenied =>
+      case commitenied: TaskCommitDenied =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle denied commits
 
       case exceptionFailure: ExceptionFailure =>

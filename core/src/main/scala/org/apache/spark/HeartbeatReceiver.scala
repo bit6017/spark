@@ -54,6 +54,10 @@ private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 
 /**
  * Lives in the driver to receive heartbeats from executors..
+ *
+ * 获取Executor的心跳信息
+ *
+ *
  */
 private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   extends ThreadSafeRpcEndpoint with SparkListener with Logging {

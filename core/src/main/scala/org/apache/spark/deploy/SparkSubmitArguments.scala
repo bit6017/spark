@@ -208,6 +208,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     }
 
     // Global defaults. These should be keep to minimum to avoid confusing behavior.
+
+    //Master的默认值是local[*]，因此如果不指定master启动spark-shell,将使用local[*]
     master = Option(master).getOrElse("local[*]")
 
     // In YARN mode, app name can be set via SPARK_YARN_APP_NAME (see SPARK-5222)

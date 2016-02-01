@@ -103,6 +103,10 @@ private[deploy] class ExecutorRunner(
           ". This process will likely be orphaned.")
       }
     }
+
+    /**
+     * ExecutorBackend的管家向Worker发送ExecutorStateChanged事件
+     */
     try {
       worker.send(ExecutorStateChanged(appId, execId, state, message, exitCode))
     } catch {
