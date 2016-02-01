@@ -28,6 +28,11 @@ private[spark] trait SchedulerBackend {
   def start(): Unit
   def stop(): Unit
   def reviveOffers(): Unit
+
+  /**
+   * SchedulerBackend定义的默认并行度
+   * @return
+   */
   def defaultParallelism(): Int
 
   def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit =

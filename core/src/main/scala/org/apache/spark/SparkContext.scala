@@ -860,6 +860,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Read a text file from HDFS, a local file system (available on all nodes), or any
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
+   *
+   * 如果不指定并行度(第二个参数)，那么将使用默认的最小并行度
+   *  默认的最小并行度是通过defaultMinPartitions函数计算得来的
    */
   def textFile(
       path: String,
@@ -2052,7 +2055,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   def getCheckpointDir: Option[String] = checkpointDir
 
-  /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */
+  /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD).
+    *    默认并行度是调用TaskScheduler的defaultParallelism函数
+    */
   def defaultParallelism: Int = {
     assertNotStopped()
     taskScheduler.defaultParallelism
@@ -2062,6 +2067,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Default min number of partitions for Hadoop RDDs when not given by user
    * Notice that we use math.min so the "defaultMinPartitions" cannot be higher than 2.
    * The reasons for this are discussed in https://github.com/mesos/spark/pull/718
+   *
+   *
+   * 默认的最小并行度不大于2
+   * 实际值取defaultParallelism函数计算得到的默认并行度与2的最小值
    */
   def defaultMinPartitions: Int = math.min(defaultParallelism, 2)
 

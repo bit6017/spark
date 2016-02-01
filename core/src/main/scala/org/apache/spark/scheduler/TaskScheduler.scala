@@ -58,6 +58,10 @@ private[spark] trait TaskScheduler {
   def setDAGScheduler(dagScheduler: DAGScheduler): Unit
 
   // Get the default level of parallelism to use in the cluster, as a hint for sizing jobs.
+
+  /**
+   *  TaskScheduler定义的默认并行度，这是一个抽象方法，也就是活，不同的TaskScheduler具有不同的默认并行度
+   * */
   def defaultParallelism(): Int
 
   /**

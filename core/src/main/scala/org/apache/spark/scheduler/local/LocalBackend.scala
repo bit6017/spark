@@ -140,6 +140,10 @@ private[spark] class LocalBackend(
     localEndpoint.send(ReviveOffers)
   }
 
+  /**
+   * LocalBackend定义的默认并行度，如果定义了spark.default.parallelism，则取该值。否则取Local模式下核的总数
+   * @return
+   */
   override def defaultParallelism(): Int =
     scheduler.conf.getInt("spark.default.parallelism", totalCores)
 

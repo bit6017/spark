@@ -422,6 +422,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     driverEndpoint.send(KillTask(taskId, executorId, interruptThread))
   }
 
+  /**
+   *  CoarseGrained模式下，比如YARN和Standalone模式下，则首先取spark.default.parallelism配置的值，
+   *  如果spark.default.parallelism没有配置，那么就取分配的核总数与2的最大值
+   * @return
+   */
   override def defaultParallelism(): Int = {
     conf.getInt("spark.default.parallelism", math.max(totalCoreCount.get(), 2))
   }
