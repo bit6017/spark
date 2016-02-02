@@ -85,6 +85,8 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
 
   /**
    * Register a shuffle with the manager and obtain a handle for it to pass to tasks.
+   *
+   * 对于Sort Shuffle，Shuffle Handle的实现比较复杂
    */
   override def registerShuffle[K, V, C](
       shuffleId: Int,

@@ -37,6 +37,8 @@ private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager 
   override val shortName: String = "hash"
 
   /* Register a shuffle with the manager and obtain a handle for it to pass to tasks. */
+
+  /**对于Hash Shuffle来说，ShuffleHandle的实现类是BaseShuffleHandle*/
   override def registerShuffle[K, V, C](
       shuffleId: Int,
       numMaps: Int,
@@ -57,7 +59,9 @@ private[spark] class HashShuffleManager(conf: SparkConf) extends ShuffleManager 
       handle.asInstanceOf[BaseShuffleHandle[K, _, C]], startPartition, endPartition, context)
   }
 
-  /** Get a writer for a given partition. Called on executors by map tasks. */
+  /** Get a writer for a given partition. Called on executors by map tasks.
+    *  对于Hash Shuffle，ShuffleWriter的实现类是HashShuffleWriter
+    */
   override def getWriter[K, V](handle: ShuffleHandle, mapId: Int, context: TaskContext)
       : ShuffleWriter[K, V] = {
     new HashShuffleWriter(

@@ -85,9 +85,22 @@ private[spark] class DiskBlockObjectWriter(
     if (hasBeenClosed) {
       throw new IllegalStateException("Writer already closed. Cannot be reopened.")
     }
+
+    /**
+     * 打开文件输出流
+     */
     fos = new FileOutputStream(file, true)
+
+    /**
+     * 对文件输出流添加TimeTracking的功能
+     */
     ts = new TimeTrackingOutputStream(writeMetrics, fos)
     channel = fos.getChannel()
+
+    /**
+     * 首先对ts添加Buffered功能，然后再对它进行压缩
+     *
+     */
     bs = compressStream(new BufferedOutputStream(ts, bufferSize))
     objOut = serializerInstance.serializeStream(bs)
     initialized = true

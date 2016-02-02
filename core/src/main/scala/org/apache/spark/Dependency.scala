@@ -87,6 +87,9 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
   val shuffleId: Int = _rdd.context.newShuffleId()
 
+  /**
+   * shuffleHandle是固定的，通过ShuffleManager的registerShuffle进行注册
+   */
   val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
     shuffleId, _rdd.partitions.size, this)
 

@@ -80,6 +80,12 @@ private[spark] class FileShuffleBlockResolver(conf: SparkConf)
       }
       val openStartTime = System.nanoTime
       val serializerInstance = serializer.newInstance()
+
+      /**
+       * 针对MapTask，获取Shuffle Writer(s)，每个元素是一个DiskBlockObjectWriter
+       * 1. writers的个数是reducer的个数
+       * 2. blockFile，获取BlockFile
+       */
       val writers: Array[DiskBlockObjectWriter] = {
         Array.tabulate[DiskBlockObjectWriter](numReducers) { bucketId =>
           val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)

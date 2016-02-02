@@ -25,7 +25,10 @@ import org.apache.spark.scheduler.MapStatus
  * Obtained inside a map task to write out records to the shuffle system.
  */
 private[spark] abstract class ShuffleWriter[K, V] {
-  /** Write a sequence of records to this task's output */
+  /**
+   *  Write a sequence of records to this task's output
+    *  为什么是Product2[K,V]类型？
+    */
   @throws[IOException]
   def write(records: Iterator[Product2[K, V]]): Unit
 

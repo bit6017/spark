@@ -76,10 +76,23 @@ private[spark] class ShuffleMapTask(
       /**
        * 写RDD的数据到磁盘,同时要更新MapStatus信息，这个信息用于Shuffle下游读取数据
        */
+
+      /**默认的Shuffle管理器是sort*/
       val manager = SparkEnv.get.shuffleManager
+
+      /**partitionId是ShuffleMapTask持有的分片数据ID，一个Task对应一个分片
+        *  问题：dep.shuffleHandle是什么含义？
+
+        */
+
+
       writer = manager.getWriter[Any, Any](dep.shuffleHandle, partitionId, context)
 
-      /***调用RDD的iterator方法遍历RDD的每条数据实现RDD写磁盘操作***/
+        /** *调用RDD的iterator方法遍历RDD的每条数据实现RDD写磁盘操作
+          *  对该RDD的第partition个分区获得迭代器进行写操作
+          *
+          *  问题：为什么元素类型一定是Product2[Any, Any](确切的说是子类)，因为只有KV类型的RDD才有Shuffle的概念
+          */
       writer.write(rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
       writer.stop(success = true).get
     } catch {

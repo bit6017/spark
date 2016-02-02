@@ -52,6 +52,15 @@ private[spark] class HashShuffleWriter[K, V](
 
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[Product2[K, V]]): Unit = {
+
+    /**
+     *  1. 如果dep定义了aggregator并且定义了dep.mapSideCombine，那么就使用dep.aggregator.get.combineValuesByKey(records, context)对records进行map端的combine
+     *  2. 如果dep定义了aggregator，但是没有定义dep.mapSideCombine，那么就不进行map端combine，给iter直接赋值records
+     *  3. 如果dep没有定义aggregator，（那么要求dep也没有定义dep.mapSideCombine），那么就不进行map端combine，给iter直接赋值records
+     *
+     *  意思是，如果定义了dep.mapSideCombine，就必须定义dep.aggregator
+     *
+     */
     val iter = if (dep.aggregator.isDefined) {
       if (dep.mapSideCombine) {
         dep.aggregator.get.combineValuesByKey(records, context)
@@ -63,9 +72,21 @@ private[spark] class HashShuffleWriter[K, V](
       records
     }
 
+    /**
+     * 遍历所有的元素，进行写操作
+     */
     for (elem <- iter) {
+      /**
+       * 获取要写入的bucketID,它是使用dep.partitioner算法来计算的
+       */
       val bucketId = dep.partitioner.getPartition(elem._1)
-      shuffle.writers(bucketId).write(elem._1, elem._2)
+
+      /**
+       * 获得bucketId对应的ShuffleWriter，writer的具体类是DiskBlockObjectWriter，这个Writer是向磁盘文件写内容，因此没有spill的操作
+       */
+      val writer = shuffle.writers(bucketId)
+
+      writer.write(elem._1, elem._2)
     }
   }
 
