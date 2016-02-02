@@ -130,6 +130,8 @@ private[spark] class IndexShuffleBlockResolver(
    * replace them with new ones.
    *
    * Note: the `lengths` will be updated to match the existing index file if use the existing ones.
+   *
+   * 索引文件是每个partition在文件中的偏移量
    * */
   def writeIndexFileAndCommit(
       shuffleId: Int,

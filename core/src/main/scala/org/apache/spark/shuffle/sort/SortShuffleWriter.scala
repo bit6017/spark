@@ -48,8 +48,16 @@ private[spark] class SortShuffleWriter[K, V, C](
   private val writeMetrics = new ShuffleWriteMetrics()
   context.taskMetrics.shuffleWriteMetrics = Some(writeMetrics)
 
-  /** Write a bunch of records to this task's output */
+  /**
+   *  Write a bunch of records to this task's output
+   *  获取
+   *
+    */
   override def write(records: Iterator[Product2[K, V]]): Unit = {
+
+    /**
+     * 首先获取ExternalSorter，排序器
+     */
     sorter = if (dep.mapSideCombine) {
       require(dep.aggregator.isDefined, "Map-side combine without Aggregator specified!")
       new ExternalSorter[K, V, C](
@@ -61,6 +69,8 @@ private[spark] class SortShuffleWriter[K, V, C](
       new ExternalSorter[K, V, V](
         context, aggregator = None, Some(dep.partitioner), ordering = None, dep.serializer)
     }
+
+    /**插入所有的记录**/
     sorter.insertAll(records)
 
     // Don't bother including the time to open the merged output file in the shuffle write time,
@@ -69,8 +79,20 @@ private[spark] class SortShuffleWriter[K, V, C](
     val output = shuffleBlockResolver.getDataFile(dep.shuffleId, mapId)
     val tmp = Utils.tempFileWith(output)
     val blockId = ShuffleBlockId(dep.shuffleId, mapId, IndexShuffleBlockResolver.NOOP_REDUCE_ID)
+
+    /**
+      * 将ExternalSorter中的数据写入到分区文件中，PartitionedFile何解？
+      */
     val partitionLengths = sorter.writePartitionedFile(blockId, tmp)
+
+    /**
+     * 有个Index文件
+     */
     shuffleBlockResolver.writeIndexFileAndCommit(dep.shuffleId, mapId, partitionLengths, tmp)
+
+    /**
+     *
+     */
     mapStatus = MapStatus(blockManager.shuffleServerId, partitionLengths)
   }
 

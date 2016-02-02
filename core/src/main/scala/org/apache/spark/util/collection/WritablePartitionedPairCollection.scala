@@ -48,17 +48,40 @@ private[spark] trait WritablePartitionedPairCollection[K, V] {
    */
   def destructiveSortedWritablePartitionedIterator(keyComparator: Option[Comparator[K]])
     : WritablePartitionedIterator = {
+
+    /**
+     * 构造partitionedDestructiveSortedIterator，每个元素都有关联的partitionID
+     */
     val it = partitionedDestructiveSortedIterator(keyComparator)
+
+
     new WritablePartitionedIterator {
       private[this] var cur = if (it.hasNext) it.next() else null
 
+      /**
+       * 首先将cur写入，然后再移动到下一个位置
+       * @param writer
+       */
       def writeNext(writer: DiskBlockObjectWriter): Unit = {
+
+        /**
+         * cur是个元组，它的第一个元素依然是一个元组，该元组的第一个元素是partitionId，第二个元组是K
+         * 此处是将K,V写入
+         */
         writer.write(cur._1._2, cur._2)
         cur = if (it.hasNext) it.next() else null
       }
 
+      /**
+       * cur指向下一个元素
+       * @return
+       */
       def hasNext(): Boolean = cur != null
 
+      /**
+       * cur指向下一个元素，cur是个元组，它的第一个元素依然是一个元组，该元组的第一个元素是partitionId，第二个元组是K
+       * @return
+       */
       def nextPartition(): Int = cur._1._1
     }
   }

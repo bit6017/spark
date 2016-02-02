@@ -443,7 +443,12 @@ private[spark] class Executor(
     }
   }
 
-  /** Reports heartbeat and metrics for active tasks to the driver. */
+  /**
+   *
+   * Reports heartbeat and metrics for active tasks to the driver.
+   *
+   * executor向Driver发送心跳信息，每隔 10秒发送一次心跳
+   **/
   private def reportHeartBeat(): Unit = {
     // list of (task id, metrics) to send back to the driver
     val tasksMetrics = new ArrayBuffer[(Long, TaskMetrics)]()

@@ -123,7 +123,13 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       handle.asInstanceOf[BaseShuffleHandle[K, _, C]], startPartition, endPartition, context)
   }
 
-  /** Get a writer for a given partition. Called on executors by map tasks. */
+  /**
+    * Get a writer for a given partition. Called on executors by map tasks.
+   * 根据ShuffleHandle的不同，选择不同的ShuffleWriter，有三个ShuffleWriter可以选择
+   *  1. UnsafeShuffleWriter
+   *  2. BypassMergeSortShuffleHandle
+   *  3. SortShuffleWriter
+    */
   override def getWriter[K, V](
       handle: ShuffleHandle,
       mapId: Int,

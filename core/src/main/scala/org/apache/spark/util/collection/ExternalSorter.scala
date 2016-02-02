@@ -639,6 +639,9 @@ private[spark] class ExternalSorter[K, V, C](
    *
    * @param blockId block ID to write to. The index file will be blockId.name + ".index".
    * @return array of lengths, in bytes, of each partition of the file (used by map output tracker)
+   *
+   *
+   *  把所有的数据写到文件中，每个文件包含R个segment，
    */
   def writePartitionedFile(
       blockId: BlockId,
@@ -651,14 +654,25 @@ private[spark] class ExternalSorter[K, V, C](
       // Case where we only have in-memory data
       val collection = if (aggregator.isDefined) map else buffer
       val it = collection.destructiveSortedWritablePartitionedIterator(comparator)
+
+      /**
+       * 遍历每个元素，每个元素都有一个关联的PartitionId，意思是说，元素排序后使得关联的partitionId也是递增的？
+       */
       while (it.hasNext) {
         val writer = blockManager.getDiskWriter(blockId, outputFile, serInstance, fileBufferSize,
           context.taskMetrics.shuffleWriteMetrics.get)
         val partitionId = it.nextPartition()
+
+        /**
+          *  如果有元素，但是它的nextPartition不等于partitionId,就退出了？意思是写完一个分片的数据结束本次写操作，需要进行commit和close
+         *  然后记录下本partition在文件中写的结束位置
+          */
         while (it.hasNext && it.nextPartition() == partitionId) {
           it.writeNext(writer)
         }
         writer.commitAndClose()
+
+
         val segment = writer.fileSegment()
         lengths(partitionId) = segment.length
       }
